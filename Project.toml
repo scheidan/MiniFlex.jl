@@ -1,0 +1,13 @@
+name = "MiniFlex"
+uuid = "9d1b3354-c8d7-11e9-237e-2d11961316e8"
+authors = ["Andreas Scheidegger <andreas.scheidegger@eawag.ch>"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
