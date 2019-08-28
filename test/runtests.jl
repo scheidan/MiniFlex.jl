@@ -1,12 +1,11 @@
 using MiniFlex
 using Test
 
-@testset "Integration test" begin
+import Interpolations
+import StaticArrays
+import ForwardDiff
 
-    import Interpolations
-    import StaticArrays
-
-
+@testset "Integration tests" begin
 
     # -----------
     # 0. fake some data
@@ -14,11 +13,15 @@ using Test
     t_rain = range(0, stop=900, length=150);
     rain_obs = [ifelse(t<500, abs(sin(t/50)*15), 0.0)  for t in t_rain]
 
-    # function to interpolate rain obersvations
+    # function to interpolate rain observations
     rain = Interpolations.LinearInterpolation(t_rain, rain_obs,
                                               extrapolation_bc = 0)
     # must return the input for each storage at time t
     precip(t) = [rain(t), 0.0, 0.0, 0.0]
+
+    # "observations" of Q3
+    flow_data = collect(hcat([ifelse(t < 600, [t,50.0], [t, 0.0]) for t in 1:101:1000.0]...)')
+
 
     # -----------
     # 1. define model
@@ -58,24 +61,18 @@ using Test
 
     # solve with V0=zeros(4)
     sol = my_model(p, zeros(4), 0:10.0:1000,
-                   reltol=1e-3);
+                   reltol=1e-3)
 
     t_obs = 0:50:1000
-    @test length(Q(sol, t_obs)) == length(t_obs)
-    @test length(evapotranspiration(sol, t_obs)) == length(t_obs)
+    @test size(Q(sol, t_obs)) == (4, length(t_obs))
+    @test size(evapotranspiration(sol, t_obs)) == (4, length(t_obs))
 
 
-end
 
+    # -----------
+    # test compatibility with ForwarDiff
 
-@testset "Forward diff" begin
-
-    import ForwardDiff
-
-
-    flow_data = collect(hcat([ifelse(t < 600, [t,50.0], [t, 0.0]) for t in 1:101:1000.0]...)')
-
-    # loss function
+    # define a loss function
     function loss(p, t_obs, Q_obs)
 
         # initial bucket volume
@@ -94,9 +91,7 @@ end
     # derive gradient function
     loss_grad(p, t_obs, Q_obs) = ForwardDiff.gradient(p -> loss(p, t_obs, Q_obs), p)
 
-
-
-    @test loss(p, flow_data[:,1], flow_data[:,2])
+    @test 0.0 < loss(p, flow_data[:,1], flow_data[:,2])
     @test length(p) == length(loss_grad(p, flow_data[:,1], flow_data[:,2]))
 
 end

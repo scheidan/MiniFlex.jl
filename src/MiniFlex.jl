@@ -198,7 +198,7 @@ end
 
     evapotranspiration(modsol::ModelSolution, time)
 """
-function evapotranspiration(solution::ModelSolution, time)
+function evapotranspiration(modsol::ModelSolution, time)
     θe = modsol.θ.x[2]  # evapo parameters
     hcat([evapotranspiration.(modsol.solution(t), t, θe.x) for t in time]...)
 end
