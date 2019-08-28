@@ -10,11 +10,10 @@
 1. Install Julia version `>=1`.
 
 ```Julia
-] add
+] add https://github.com/scheidan/MiniFlex.jl
 
 ```
 
-`
 
 ## Usage
 
