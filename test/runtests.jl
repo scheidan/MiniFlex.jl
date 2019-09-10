@@ -1,6 +1,7 @@
 using MiniFlex
 using Test
 
+import TransformVariables
 import Interpolations
 import StaticArrays
 import ForwardDiff
@@ -46,26 +47,31 @@ import ForwardDiff
     my_model = build_model(moddef)
 
 
-    # define parameters to test
-    p = Param(
-        FlowParam([0.1, 0.01],    # θ for Q1
-                  [0.05, 0.01],    # θ for Q2
-                  [0.02, 0.01],     # θ for Q3
-                  [0.013, 0.01]),   # θ for Q4
-        EvapoParam([0.0, 1.0],    # θ for evapo1
-                   [0.00, 1.0],    # θ for evapo2
-                   [0.00, 1.0],    # θ for evapo3
-                   [0.00, 1.0])    # θ for evapo4
-    )
+    # define parameter tuple to test
+    p = (θflow = [[0.1, 0.01],
+                  [0.05, 0.01],
+                  [0.02, 0.01],
+                  [0.01, 0.01]],
+         θevap = [[0.1, 0.01],
+                  [0.05, 0.01],
+                  [0.02, 0.01],
+                  [0.01, 0.01]])
 
+    # the coresponding parameter vector
+    v = TransformVariables.inverse(moddef.θtransform, p)
 
-    # solve with V0=zeros(4)
-    sol = my_model(p, zeros(4), 0:10.0:1000,
-                   reltol=1e-3)
+    # solve with parameter tuple
+    sol1 = my_model(p, zeros(4), 0:10.0:1000,
+                    reltol=1e-3)
+    # solve with parameter vector
+    sol2 = my_model(v, zeros(4), 0:10.0:1000,
+                    reltol=1e-3)
 
     t_obs = 0:50:1000
-    @test size(Q(sol, t_obs)) == (4, length(t_obs))
-    @test size(evapotranspiration(sol, t_obs)) == (4, length(t_obs))
+    @test isapprox(Q(sol1, t_obs), Q(sol2, t_obs), rtol=0.01)
+
+    @test size(Q(sol1, t_obs)) == (4, length(t_obs))
+    @test size(evapotranspiration(sol1, t_obs)) == (4, length(t_obs))
 
 
 
@@ -92,6 +98,7 @@ import ForwardDiff
     loss_grad(p, t_obs, Q_obs) = ForwardDiff.gradient(p -> loss(p, t_obs, Q_obs), p)
 
     @test 0.0 < loss(p, flow_data[:,1], flow_data[:,2])
-    @test length(p) == length(loss_grad(p, flow_data[:,1], flow_data[:,2]))
+    @test 0.0 < loss(v, flow_data[:,1], flow_data[:,2])
+    @test length(v) == length(loss_grad(v, flow_data[:,1], flow_data[:,2]))
 
 end

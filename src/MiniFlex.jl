@@ -10,7 +10,7 @@ module MiniFlex
 
 using DifferentialEquations
 using LinearAlgebra
-import RecursiveArrayTools
+using TransformVariables
 
 export ModelStructure, ModelSolution
 export build_model
@@ -20,12 +20,6 @@ export Param, FlowParam, EvapoParam
 
 # -----------
 # Types for model definition
-
-# for nicer parameter definitions
-
-const Param = RecursiveArrayTools.ArrayPartition
-const FlowParam = RecursiveArrayTools.ArrayPartition
-const EvapoParam = RecursiveArrayTools.ArrayPartition
 
 @doc """
 # Struct to hold model definition
@@ -49,8 +43,24 @@ We have four reservoirs S1, S2, S3, S4:
 struct ModelStructure
     routing::AbstractMatrix
     precip::Function
+    θtransform::TransformVariables.AbstractTransform
 end
 
+function ModelStructure(routing, precip)
+
+    if(size(routing, 1) != size(routing, 2))
+        error("Routing matrix must be square!")
+    end
+
+    # define parameter transformation: Real vector -> NamedTuple
+    N = size(routing, 1)
+    θtransform = as((
+        θflow = as(Vector, as(Vector, asℝ₊, 2), N),
+        θevap = as(Vector, as(Vector, asℝ₊, 2), N)
+    ))
+
+    ModelStructure(routing, precip, θtransform)
+end
 
 
 # -----------
@@ -67,8 +77,9 @@ end
 """
 struct ModelSolution
     solution::DiffEqBase.AbstractODESolution
-    θ::AbstractArray
+    θ::NamedTuple
 end
+
 
 @doc """
 # Set up the model and ODE solver
@@ -81,7 +92,7 @@ A *function* to be called with arguments:
 (p, V0, time, args...; kwargs...)
 
 where
-- `p`: parameters
+- `p`: parameters. Either a NamedTuple or a Vector ∈ ℝ
 - `V0`: vector of initial storage volumes for each reservoir
 - `time`: points in time to evaluate model
 - `args`: other arguments passed to `Differentialequations.solve`, e.g. `BS3()` to set solver
@@ -107,7 +118,15 @@ moddef = ModelStructure(
 my_model = build_model(moddef)
 
 ## 3) run model
-p = Param(...)  # define parameters
+ # define parameters
+p = (θflow = [[0.1, 0.01],    # Q1
+              [0.05, 0.01],   # Q2
+               [0.02, 0.01],  # Q3
+               [0.01, 0.01]], # Q4
+      θevap = [[0.1, 0.01],   # evapo 1
+               [0.05, 0.01],  # evapo 2
+               [0.02, 0.01],  # evapo 3
+               [0.01, 0.01]]) # evapo 4
 V0 = zeros(4)   # inital storage
 
 sol = my_model(p, V0, 0:10.0:1000) # default solver
@@ -116,31 +135,22 @@ sol2 = my_model(p, V0, 0:10.0:1000, ImplicitMidpoint(), reltol=1e-3, dt=5)
 """
 function build_model(mod::ModelStructure)
 
-    if(size(mod.routing, 1) != size(mod.routing, 2))
-        error("Routing matrix must be square!")
-    end
-
-    # define ODE for all storages
+    # define ODE for all storages (p is a NamedTuple)
     function dV(dV,V,p,t)
-
-        θrun = p.x[1] # runoff parameters
-        θeva = p.x[2] # evapotranspiration parameters
-
         # calculate flows
-        outQ = Q.(V, t, θrun.x)
+        outQ = Q.(V, t, p.θflow)
         dV .= mod.precip(t) .+ mod.routing*outQ
         dV .-= outQ             # substact outlow
         # substract evapotranspiration
-        dV .-= evapotranspiration.(V, t, θeva.x)
+        dV .-= evapotranspiration.(V, t, p.θevap)
     end
 
-
-    function solve_model(p, V0, time, args...; kwargs...)
+    function solve_model(p::NamedTuple, V0, time, args...; kwargs...)
 
         # check dimensions
         n_storages = size(mod.routing, 1)
 
-        if(!(length(p.x[1].x) == length(p.x[2].x) == n_storages))
+        if(!(length(p.θflow) == length(p.θevap) == n_storages))
             error("Parameter dimensions are not matching the number " *
                   "of storages ($(n_storages))!")
         end
@@ -157,11 +167,16 @@ function build_model(mod::ModelStructure)
 
         # solve ode
         prob = ODEProblem(dV,
-                          eltype(p).(V0),
+                          nested_eltype(p).(V0),
                           (0.0, maximum(time)),
                           p)
         sol = solve(prob, args...; saveat=time, kwargs...)
         ModelSolution(sol, p)
+    end
+
+    # if called with vector, we transform the parameters to tuple
+    function solve_model(p::Vector, V0, time, args...; kwargs...)
+        solve_model(mod.θtransform(p), V0, time, args...; kwargs...)
     end
 
     return solve_model
@@ -184,8 +199,7 @@ end
     Q(modsol::ModelSolution, time)
 """
 function Q(modsol::ModelSolution, time)
-    θq = modsol.θ.x[1] # runoff parameters
-    hcat([Q.(modsol.solution(t), t, θq.x) for t in time]...)
+    hcat([Q.(modsol.solution(t), t, modsol.θ.θflow) for t in time]...)
 end
 
 
@@ -199,8 +213,20 @@ end
     evapotranspiration(modsol::ModelSolution, time)
 """
 function evapotranspiration(modsol::ModelSolution, time)
-    θe = modsol.θ.x[2]  # evapo parameters
-    hcat([evapotranspiration.(modsol.solution(t), t, θe.x) for t in time]...)
+    hcat([evapotranspiration.(modsol.solution(t), t, modsol.θ.θevap) for t in time]...)
+end
+
+
+
+# -----------
+# helpers
+
+function nested_eltype(x)
+    y = eltype(x)
+    while y <: AbstractArray
+        y = eltype(y)
+    end
+    return(y)
 end
 
 end # module
