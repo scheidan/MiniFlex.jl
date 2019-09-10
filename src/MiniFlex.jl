@@ -11,6 +11,7 @@ module MiniFlex
 using DifferentialEquations
 using LinearAlgebra
 using TransformVariables
+import StaticArrays
 
 export ModelStructure, ModelSolution
 export build_model
@@ -59,7 +60,10 @@ function ModelStructure(routing, precip)
         θevap = as(Vector, as(Vector, asℝ₊, 2), N)
     ))
 
-    ModelStructure(routing, precip, θtransform)
+    # convert routing matrix to static Array
+    srouting = StaticArrays.SMatrix{N,N}(routing)
+
+    ModelStructure(srouting, precip, θtransform)
 end
 
 

@@ -25,6 +25,9 @@ The example below is mainly a placeholder.
 
 using MiniFlex
 
+import Interpolations
+import ForwardDiff
+
 # -----------
 # import resp. fake some data
 
@@ -41,11 +44,10 @@ precip(t) = [rain(t), 0.0, 0.0, 0.0]
 # define model
 
 # matrix defines routing from column to row
-M = @SMatrix [0   0  0  0;
-              0.5 0  0  0;      # 0.5*Q1 -> S2
-              0.5  1 0  0;      # 0.5*Q1 + 1*Q2 -> S3
-              0    0  1 0]      # Q3 -> S4
-
+M = [0   0  0  0;
+     0.5 0  0  0;      # 0.5*Q1 -> S2
+     0.5 1  0  0;      # 0.5*Q1 + 1*Q2 -> S3
+     0   0  1  0]      # Q3 -> S4
 
 moddef = ModelStructure(
     M,                          # routing matrix

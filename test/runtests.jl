@@ -3,7 +3,6 @@ using Test
 
 import TransformVariables
 import Interpolations
-import StaticArrays
 import ForwardDiff
 
 @testset "Integration tests" begin
@@ -27,16 +26,15 @@ import ForwardDiff
     # -----------
     # 1. define model
 
-    # from column to row
-    M = StaticArrays.@SMatrix [0   0  0  0;
-                               0.5 0  0  0;      # 0.5*Q1 -> S2
-                               0.5  1 0  0;      # 0.5*Q1 + 1*Q2 -> S3
-                               0    0  1 0]      # Q3 -> S4
-
-
     moddef = ModelStructure(
-        M,                          # routing matrix
-        precip                      # preciptation(t)
+        # routing matrix, from column to row
+        [0   0  0  0;
+         0.5 0  0  0;      # 0.5*Q1 -> S2
+         0.5 1  0  0;      # 0.5*Q1 + 1*Q2 -> S3
+         0   0  1  0],     # Q3 -> S4
+
+        # preciptation(t)
+        precip
     )
 
 
