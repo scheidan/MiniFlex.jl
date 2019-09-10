@@ -60,18 +60,15 @@ moddef = ModelStructure(
 my_model = build_model(moddef)
 
 
-# define parameters to test
-p = Param(
-    FlowParam([0.1, 0.01],    # θ for Q1
-              [0.05, 0.01],    # θ for Q2
-              [0.02, 0.01],     # θ for Q3
-              [0.013, 0.01]),   # θ for Q4
-    EvapoParam([0.0, 1.0],    # θ for evapo1
-               [0.00, 1.0],    # θ for evapo2
-               [0.00, 1.0],    # θ for evapo3
-               [0.00, 1.0])    # θ for evapo4
-)
-
+# define a NamedTuple for parameters
+p = (θflow = [[0.1, 0.01],
+              [0.05, 0.01],
+               [0.02, 0.01],
+               [0.01, 0.01]],
+      θevap = [[0.1, 0.01],
+               [0.05, 0.01],
+               [0.02, 0.01],
+               [0.01, 0.01]])
 
 
 sol = my_model(p, zeros(4), 0:10.0:1000,
@@ -81,18 +78,27 @@ sol = my_model(p, zeros(4), 0:10.0:1000,
 sol = my_model(p, zeros(4), 0:10.0:1000,
                ImplicitMidpoint(), reltol=1e-3, dt = 0.1)
 
+alternatively, the model can be called with a vector. This can be
+useful for optimization:
+v = randn(16)
+sol = my_model(v, zeros(4), 0:10.0:1000,
+               reltol=1e-3);
+
+# Note, `v` can contain values from -Inf to Inf. The parameters are
+# automatically transformed to correct parameter space if needed.
+
 
 # -----------
 # define loss
 
 # loss function
-function loss(p, t_obs, Q_obs)
+function loss(v, t_obs, Q_obs)
 
     # initial bucket volume
     V_init = zeros(4)
 
     # solve ODE
-    sol = my_model(p, V_init, t_obs)
+    sol = my_model(v, V_init, t_obs)
 
     # get Q3
     Q3 = Q(sol, t_obs)[3,:]
@@ -106,8 +112,8 @@ loss_grad(p, t_obs, Q_obs) = ForwardDiff.gradient(p -> loss(p, t_obs, Q_obs), p)
 
 
 # calucalte loss and the gradients
-loss(p, flow_data[:,1], flow_data[:,2])
-loss_grad(p, flow_data[:,1], flow_data[:,2])
+loss(v, flow_data[:,1], flow_data[:,2])
+loss_grad(v, flow_data[:,1], flow_data[:,2])
 
 ```
 
