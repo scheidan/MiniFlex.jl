@@ -24,9 +24,9 @@ import ForwardDiff
 
 
     # -----------
-    # 1. define model
+    # define model
 
-    moddef = ModelStructure(
+    test_model = HydroModel(
         # routing matrix, from column to row
         [0   0  0  0;
          0.5 0  0  0;      # 0.5*Q1 -> S2
@@ -36,13 +36,6 @@ import ForwardDiff
         # preciptation(t)
         precip
     )
-
-
-    # -----------
-    # construct model
-
-    # construct function to solve model
-    my_model = build_model(moddef)
 
 
     # define parameter tuple to test
@@ -56,14 +49,14 @@ import ForwardDiff
                   [0.01, 0.01]])
 
     # the coresponding parameter vector
-    v = TransformVariables.inverse(moddef.θtransform, p)
+    v = TransformVariables.inverse(test_model.θtransform, p)
 
     # solve with parameter tuple
-    sol1 = my_model(p, zeros(4), 0:10.0:1000,
-                    reltol=1e-3)
+    sol1 = test_model(p, zeros(4), 0:10.0:1000,
+                    reltol=1e-5)
     # solve with parameter vector
-    sol2 = my_model(v, zeros(4), 0:10.0:1000,
-                    reltol=1e-3)
+    sol2 = test_model(v, zeros(4), 0:10.0:1000,
+                    reltol=1e-5)
 
     t_obs = 0:50:1000
     @test isapprox(Q(sol1, t_obs), Q(sol2, t_obs), rtol=0.01)
@@ -83,7 +76,7 @@ import ForwardDiff
         V_init = zeros(4)
 
         # solve ODE
-        sol = my_model(p, V_init, t_obs)
+        sol = test_model(p, V_init, t_obs)
 
         # get Q3
         Q3 = Q(sol, t_obs)[3,:]

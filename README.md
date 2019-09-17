@@ -1,8 +1,21 @@
-# MiniFlex.jl - a conceptual hydrological model with flexible routing
+# MiniFlex.jl - a conceptual hydrological model for Automatic Differentation
 
 [![Build Status](https://travis-ci.com/scheidan/MiniFlex.jl.svg?branch=master)](https://travis-ci.com/scheidan/MiniFlex.jl)
 [![Build Status](https://ci.appveyor.com/api/projects/status/github/scheidan/MiniFlex.jl?svg=true)](https://ci.appveyor.com/project/scheidan/MiniFlex-jl)
 [![Coveralls](https://coveralls.io/repos/github/scheidan/MiniFlex.jl/badge.svg?branch=master)](https://coveralls.io/github/scheidan/MiniFlex.jl?branch=master)
+
+
+## Motivation
+
+`MiniFlex` is a conceptual hydrological model formulated continuously
+in time based on differential equations. The most important design goals are:
+
+- Allow for any number of reservoirs and arbitrary routing.
+- Make use of efficient ODE solvers provided by
+  `DifferentialEquations.jl`.
+- Ensure compatibility with Automatic Differentation libraries such as
+  `ForwardDiff.jl` to experiment with more efficient optimization algorithms
+    and Hamiltonian MC.
 
 
 ## Installation
@@ -43,23 +56,20 @@ precip(t) = [rain(t), 0.0, 0.0, 0.0]
 # -----------
 # define model
 
-# matrix defines routing from column to row
-M = [0   0  0  0;
+my_model = HydroModel(
+    # routing matrix, from column to row
+    [0   0  0  0;
      0.5 0  0  0;      # 0.5*Q1 -> S2
      0.5 1  0  0;      # 0.5*Q1 + 1*Q2 -> S3
-     0   0  1  0]      # Q3 -> S4
+     0   0  1  0],     # Q3 -> S4
 
-moddef = ModelStructure(
-    M,                          # routing matrix
-    precip                      # preciptation(t)
+    # preciptation(t)
+    precip
 )
 
 
 # -----------
 # solve model
-
-# construct function to solve model
-my_model = build_model(moddef)
 
 
 # define a NamedTuple for parameters
@@ -80,8 +90,8 @@ sol = my_model(p, zeros(4), 0:10.0:1000,
 sol = my_model(p, zeros(4), 0:10.0:1000,
                ImplicitMidpoint(), reltol=1e-3, dt = 0.1)
 
-alternatively, the model can be called with a vector. This can be
-useful for optimization:
+# Alternatively, the model can be called with a vector. This is
+# useful for optimization:
 v = randn(16)
 sol = my_model(v, zeros(4), 0:10.0:1000,
                reltol=1e-3);
@@ -91,7 +101,7 @@ sol = my_model(v, zeros(4), 0:10.0:1000,
 
 
 # -----------
-# define loss
+# Automatic Differentation with ForwardDiff
 
 # loss function
 function loss(v, t_obs, Q_obs)
@@ -113,7 +123,7 @@ end
 loss_grad(p, t_obs, Q_obs) = ForwardDiff.gradient(p -> loss(p, t_obs, Q_obs), p)
 
 
-# calucalte loss and the gradients
+# calculate loss and the gradients
 loss(v, flow_data[:,1], flow_data[:,2])
 loss_grad(v, flow_data[:,1], flow_data[:,2])
 
