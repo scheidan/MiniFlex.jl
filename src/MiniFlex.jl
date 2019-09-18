@@ -1,7 +1,7 @@
 ## -------------------------------------------------------
+## MiniFlex.jl
 ##
 ## Andreas Scheidegger -- andreas.scheidegger@eawag.ch
-##
 ## -------------------------------------------------------
 
 
@@ -37,6 +37,26 @@ struct ModelSolution
     θ::NamedTuple
 end
 
+# pretty printing short
+function Base.show(io::IO, sol::ModelSolution)
+    tmin = minimum(sol.solution.t)
+    tmax = maximum(sol.solution.t)
+    print(io, "Model solution t ∈ [$tmin - $tmax]")
+end
+
+# pretty printin verbose
+function Base.show(io::IO, ::MIME"text/plain", sol::ModelSolution)
+    print(io, sol)
+    println(io, "\nParameters:")
+    println(io, " θflow:")
+    println(io, "   $(sol.θ.θflow)")
+    println(io, " θevap:")
+    println(io, "   $(sol.θ.θevap)")
+
+    println(io, "\nFlows and evapotranspiration time series can be obtained with\n"
+            * " Q(solution, time_range)\n"
+            * " evapotranspiration(solution, time_range)")
+end
 
 # -----------
 # Type for model definition
@@ -180,7 +200,7 @@ function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
     # solve ode
     prob = ODEProblem(m.dV,
                       nested_eltype(p).(V0),
-                      (0.0, maximum(time)),
+                      (minimum(time), maximum(time)),
                       p)
     sol = solve(prob, args...; saveat=time, kwargs...)
     ModelSolution(sol, p)

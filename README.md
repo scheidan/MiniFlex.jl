@@ -67,6 +67,7 @@ my_model = HydroModel(
     precip
 )
 
+my_model
 
 # -----------
 # solve model
@@ -85,6 +86,8 @@ p = (θflow = [[0.1, 0.01],
 
 sol = my_model(p, zeros(4), 0:10.0:1000,
                reltol=1e-3);
+
+sol
 
 # any additional arguments are passed to DifferentialEquations.solve(). E.g.
 sol = my_model(p, zeros(4), 0:10.0:1000,

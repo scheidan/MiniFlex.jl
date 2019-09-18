@@ -1,3 +1,9 @@
+## -------------------------------------------------------
+## MiniFlex.jl
+##
+## Andreas Scheidegger -- andreas.scheidegger@eawag.ch
+## -------------------------------------------------------
+
 using MiniFlex
 using Test
 
