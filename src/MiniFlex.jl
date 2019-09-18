@@ -8,15 +8,15 @@
 module MiniFlex
 
 
-using DifferentialEquations
+import Reexport
+Reexport.@reexport using DifferentialEquations
 using LinearAlgebra
 using TransformVariables
 import StaticArrays
 
 import Base.show
 
-export HydroModel, ModelSolution
-export build_model
+export HydroModel
 export Q, evapotranspiration
 
 
