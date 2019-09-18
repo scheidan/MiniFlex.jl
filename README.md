@@ -57,15 +57,15 @@ precip(t) = [rain(t), 0.0, 0.0, 0.0]
 # define model
 
 my_model = HydroModel(
-    # routing matrix, from column to row
-    [0   0  0  0;
-     0.5 0  0  0;      # 0.5*Q1 -> S2
-     0.5 1  0  0;      # 0.5*Q1 + 1*Q2 -> S3
-     0   0  1  0],     # Q3 -> S4
+    [Connection(:S1 => :S2, 0.6),  # 60% of the outflow of S1 go to S2
+     Connection(:S2 => :S3, 0.4),  # the names S1 and S2 are arbitrary
+     Connection(:S1 => :S3),
+     Connection(:S3 => :S4)],      # default is 100 %
 
-    # preciptation(t)
+    ## precipitation(t)
     precip
 )
+
 
 my_model
 

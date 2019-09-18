@@ -33,12 +33,10 @@ import ForwardDiff
     # define model
 
     test_model = HydroModel(
-        # routing matrix, from column to row
-        [0   0  0  0;
-         0.5 0  0  0;      # 0.5*Q1 -> S2
-         0.5 1  0  0;      # 0.5*Q1 + 1*Q2 -> S3
-         0   0  1  0],     # Q3 -> S4
-
+        [Connection(:S1 => :S2, 0.5),
+         Connection(:S2 => :S3, 0.5),
+         Connection(:S1 => :S3),
+         Connection(:S3 => :S4)],
         # preciptation(t)
         precip
     )

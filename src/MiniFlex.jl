@@ -17,6 +17,7 @@ import StaticArrays
 import Base.show
 
 export HydroModel
+export Connection
 export Q, evapotranspiration
 
 
@@ -58,32 +59,73 @@ function Base.show(io::IO, ::MIME"text/plain", sol::ModelSolution)
             * " evapotranspiration(solution, time_range)")
 end
 
+
+# -----------
+# Type for flow connection
+
+struct Connection
+    reservoirs::Pair
+    fraction::Real
+end
+Connection(reservoirs::Pair) = Connection(reservoirs, 1)
+
+# pretty printing short
+function Base.show(io::IO, con::Connection)
+    print(io, con.reservoirs[1], " → ", con.reservoirs[2], " ($(con.fraction))")
+end
+
+
+function routing_mat(fpaths)
+    # get all reservoirs
+    all_reservoirs = []
+    for fp in fpaths
+        push!(all_reservoirs, fp.reservoirs[1])
+        push!(all_reservoirs, fp.reservoirs[2])
+    end
+    unique!(all_reservoirs)
+
+    # Build adjacency Matrix
+    M = zeros(length(all_reservoirs), length(all_reservoirs))
+    for fp in fpaths
+        from_idx = findfirst(fp.reservoirs[1] .== all_reservoirs)
+        to_idx = findfirst(fp.reservoirs[2] .== all_reservoirs)
+        M[to_idx, from_idx] = fp.fraction
+    end
+    M, all_reservoirs
+end
+
+
+
 # -----------
 # Type for model definition
 
 struct HydroModel
-    routing::AbstractMatrix
+    reservoirs::Array
     precip::Function
     θtransform::TransformVariables.AbstractTransform
+    routing::AbstractMatrix
+    connections::Array{Connection,1}
     dV::Function
 end
 
 
-function HydroModel(routing, precip)
+function HydroModel(connections::Array{Connection,1}, precip::Function)
+
+    # construct routing matrix
+    routing, reservoirs = MiniFlex.routing_mat(connections)
+    # convert routing matrix to static Array
+    N = size(routing, 1)
+    routing = StaticArrays.SMatrix{N,N}(routing)
 
     if(size(routing, 1) != size(routing, 2))
         error("Routing matrix must be square!")
     end
 
     # define parameter transformation: Real vector -> NamedTuple
-    N = size(routing, 1)
     θtransform = as((
         θflow = as(Vector, as(Vector, asℝ₊, 2), N),
         θevap = as(Vector, as(Vector, asℝ₊, 2), N)
     ))
-
-    # convert routing matrix to static Array
-    srouting = StaticArrays.SMatrix{N,N}(routing)
 
     # define ODE for all storages (p is a NamedTuple)
     function dV(dV,V,p,t)
@@ -95,7 +137,7 @@ function HydroModel(routing, precip)
         dV .-= evapotranspiration.(V, t, p.θevap)
     end
 
-    HydroModel(srouting, precip, θtransform, dV)
+    HydroModel(reservoirs, precip, θtransform, routing, connections, dV)
 end
 
 
@@ -104,27 +146,27 @@ end
 
 ## Model definition
 
-  HydroModel(routing::AbstractMatrix, precip::Function)
+  HydroModel(connections::Array{Connection,1}, precip::Function)
 
 where
-- `routing::AbstractMatrix`: adjacency matrix to define connection between reservoirs
+- `connections::Array`: array of `Connection`s to define reservoir connections
 - `precip::Function`: function that returns a vector of rain intensities
                       for  each reservoir at any given time point. Takes time as argument.
 
 
-### Example of routing matrix
+### Example of routing
 
-We have four reservoirs S1, S2, S3, S4:
+We have four reservoirs S1, S2, S3, S4 (any other names could be used):
 ```julia
-[0    0  0  0;      # S1 has no inflow from other reservoirs
- 0.5  0  0  0;      # 0.5*Q1 -> S2
- 0.5  1  0  0;      # 0.5*Q1 + 1*Q2 -> S3
- 0    0  1  0]      # Q3 -> S4
+[Connection(:S1 => :S2, 0.6),  # 60% off S1 flows to S2
+ Connection(:S2 => :S3, 0.4),
+ Connection(:S1 => :S3),       # default is 100%
+ Connection(:S3 => :S4)]
 ```
 
 ## Run a HydroModel
 
-Objects of type `HydroModel` are callable to tun the simulation:
+Objects of type `HydroModel` are callable to run the simulation:
 
   (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
 
@@ -143,12 +185,11 @@ Example:
 ## 1) define model
 
 my_model = HydroModel(
-    ## routing matrix
-    [0   0  0  0;
-     0.5 0  0  0;      # 0.5*Q1 -> S2
-     0.5  1 0  0;      # 0.5*Q1 + 1*Q2 -> S3
-     0    0  1 0],     # Q3 -> S4
-    ## preciptation(t)
+    [Connection(:S1 => :S2, 0.6),   # the names :S1 and :S2 are arbitrary
+     Connection(:S2 => :S3, 0.4),
+     Connection(:S1 => :S3),
+     Connection(:S3 => :S4)],
+    ## precipitation(t)
     precip
 )
 
@@ -218,18 +259,17 @@ function Base.show(io::IO, m::HydroModel)
     print(io, "HydroModel ($(size(m.routing,1)) reservoirs)")
 end
 
-# pretty printin verbose
+# pretty printing verbose
 function Base.show(io::IO, ::MIME"text/plain", m::HydroModel)
 
-    mstr = "$(m.routing)"
-    mstr = replace(mstr, "0.0" => " ⋅ ")
-    mstr = replace(mstr, ";" => "\n  ")
-    mstr = replace(mstr, "[" => "   ")
-    mstr = replace(mstr, "]" => "")
-
-    println(io, "HydroModel model with $(size(m.routing,1)) reservoirs")
-    println(io, "and routing matrix:")
-    print(io, mstr)
+    println(io, "HydroModel model with $(size(m.routing,1)) reservoirs connected by:")
+    for f in m.connections
+        println(io, " ", f)
+    end
+    println(io, "\nThe parameters must be ordered as:")
+    for (i, r) in enumerate(m.reservoirs)
+        i==1 ? print(io, " $i: ", r) : print(io, ", $i: ", r)
+    end
 end
 
 
