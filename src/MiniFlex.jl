@@ -13,6 +13,8 @@ using LinearAlgebra
 using TransformVariables
 import StaticArrays
 
+import Base.show
+
 export HydroModel, ModelSolution
 export build_model
 export Q, evapotranspiration
@@ -190,6 +192,25 @@ function (m::HydroModel)(p::AbstractArray, V0, time, args...; kwargs...)
 
 end
 
+
+# pretty printing short
+function Base.show(io::IO, m::HydroModel)
+    print(io, "HydroModel ($(size(m.routing,1)) reservoirs)")
+end
+
+# pretty printin verbose
+function Base.show(io::IO, ::MIME"text/plain", m::HydroModel)
+
+    mstr = "$(m.routing)"
+    mstr = replace(mstr, "0.0" => " ⋅ ")
+    mstr = replace(mstr, ";" => "\n  ")
+    mstr = replace(mstr, "[" => "   ")
+    mstr = replace(mstr, "]" => "")
+
+    println(io, "HydroModel model with $(size(m.routing,1)) reservoirs")
+    println(io, "and routing matrix:")
+    print(io, mstr)
+end
 
 
 # -----------
