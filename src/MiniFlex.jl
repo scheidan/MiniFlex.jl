@@ -41,7 +41,7 @@ end
 function Base.show(io::IO, sol::ModelSolution)
     tmin = minimum(sol.solution.t)
     tmax = maximum(sol.solution.t)
-    print(io, "Model solution t ∈ [$tmin - $tmax]")
+    print(io, "Model solution for t ∈ [$tmin - $tmax]")
 end
 
 # pretty printin verbose
