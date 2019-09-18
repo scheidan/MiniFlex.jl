@@ -113,13 +113,17 @@ function HydroModel(connections::Array{Connection,1}, precip::Function)
 
     # construct routing matrix
     routing, reservoirs = MiniFlex.routing_mat(connections)
+
+    # check routing
+    tot_fraction = sum(routing, dims=1)
+    if(any(tot_fraction .> 1 + eps()))
+        error("You cannot define more than 100% total outflow! Check reservoirs(s):\n",
+              reservoirs[tot_fraction[1,:] .> 1])
+    end
+
     # convert routing matrix to static Array
     N = size(routing, 1)
     routing = StaticArrays.SMatrix{N,N}(routing)
-
-    if(size(routing, 1) != size(routing, 2))
-        error("Routing matrix must be square!")
-    end
 
     # define parameter transformation: Real vector -> NamedTuple
     θtransform = as((
@@ -250,7 +254,6 @@ end
 function (m::HydroModel)(p::AbstractArray, V0, time, args...; kwargs...)
     # if called with vector, we transform the parameters to tuple
     m(m.θtransform(p), V0, time, args...; kwargs...)
-
 end
 
 

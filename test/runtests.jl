@@ -34,8 +34,8 @@ import ForwardDiff
 
     test_model = HydroModel(
         [Connection(:S1 => :S2, 0.5),
-         Connection(:S2 => :S3, 0.5),
-         Connection(:S1 => :S3),
+         Connection(:S2 => :S3),
+         Connection(:S1 => :S3, 0.5),
          Connection(:S3 => :S4)],
         # preciptation(t)
         precip
