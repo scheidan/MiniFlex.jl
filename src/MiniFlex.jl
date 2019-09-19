@@ -91,6 +91,8 @@ function routing_mat(fpaths)
         to_idx = findfirst(fp.reservoirs[2] .== all_reservoirs)
         M[to_idx, from_idx] = fp.fraction
     end
+    M = M - I
+
     M, all_reservoirs
 end
 
@@ -115,9 +117,9 @@ function HydroModel(connections::Array{Connection,1}, precip::Function)
     routing, reservoirs = MiniFlex.routing_mat(connections)
 
     # check routing
-    tot_fraction = sum(routing, dims=1)
+    tot_fraction = sum(routing + I, dims=1)
     if(any(tot_fraction .> 1 + eps()))
-        error("You cannot define more than 100% total outflow! Check reservoirs(s):\n",
+        error("You cannot define more than 100% total outflow! Check reservoirs(s): ",
               reservoirs[tot_fraction[1,:] .> 1])
     end
 
@@ -135,8 +137,7 @@ function HydroModel(connections::Array{Connection,1}, precip::Function)
     function dV(dV,V,p,t)
         # calculate flows
         outQ = Q.(V, t, p.θflow)
-        dV .= precip(t) .+ routing*outQ
-        dV .-= outQ             # substact outlow
+        dV .= precip(t) .+ routing*Q.(V, t, p.θflow)
         # substract evapotranspiration
         dV .-= evapotranspiration.(V, t, p.θevap)
     end
