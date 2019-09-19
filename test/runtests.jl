@@ -41,6 +41,14 @@ import ForwardDiff
         precip
     )
 
+    # too much outflow of S1
+    @test_throws ErrorException HydroModel(
+        [Connection(:S1 => :S2, 0.5),
+         Connection(:S2 => :S3),
+         Connection(:S1 => :S3, 0.8)],
+        # preciptation(t)
+        precip
+    )
 
     # define parameter tuple to test
     p = (θflow = [[0.1, 0.01],
@@ -57,10 +65,10 @@ import ForwardDiff
 
     # solve with parameter tuple
     sol1 = test_model(p, zeros(4), 0:10.0:1000,
-                    reltol=1e-5)
+                      reltol=1e-5)
     # solve with parameter vector
     sol2 = test_model(v, zeros(4), 0:10.0:1000,
-                    reltol=1e-5)
+                      reltol=1e-5)
 
     t_obs = 0:50:1000
     @test isapprox(Q(sol1, t_obs), Q(sol2, t_obs), rtol=0.01)
@@ -68,7 +76,14 @@ import ForwardDiff
     @test size(Q(sol1, t_obs)) == (4, length(t_obs))
     @test size(evapotranspiration(sol1, t_obs)) == (4, length(t_obs))
 
+    # wrong paramter dims
+    pbad = (θflow = [[0.1, 0.01],
+                     [0.05, 0.01]],
+            θevap = [[0.1, 0.01]])
+    @test_throws ErrorException test_model(pbad, zeros(4), 0:10.0:1000)
 
+    # wrong dims of initial
+    @test_throws ErrorException test_model(p, zeros(2), 0:10.0:1000)
 
     # -----------
     # test compatibility with ForwarDiff

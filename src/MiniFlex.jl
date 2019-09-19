@@ -228,8 +228,8 @@ function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
     n_storages = size(m.routing, 1)
 
     if(!(length(p.θflow) == length(p.θevap) == n_storages))
-            error("Parameter dimensions are not matching the number " *
-                  "of storages ($(n_storages))!")
+        error("Parameter dimensions are not matching the number " *
+              "of storages ($(n_storages))!")
     end
 
     if(length(m.precip(minimum(time))) != n_storages)
