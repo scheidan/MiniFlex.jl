@@ -41,6 +41,7 @@ using MiniFlex
 
 import Interpolations
 import ForwardDiff
+import StaticArrays
 
 # -----------
 # import resp. fake some data
@@ -51,7 +52,7 @@ rain_obs = [ifelse(t<500, abs(sin(t/50)*15), 0.0)  for t in t_rain];
 rain = Interpolations.LinearInterpolation(t_rain, rain_obs,
                                           extrapolation_bc = 0);
 # it must return the input for each storage at time t
-precip(t) = [rain(t), 0.0, 0.0, 0.0]
+precip(t) = StaticArrays.@SVector [rain(t), 0.0, 0.0, 0.0]  # using SVector avoids allocations
 
 
 # -----------

@@ -12,7 +12,6 @@ import Reexport
 Reexport.@reexport using DifferentialEquations
 using LinearAlgebra
 using TransformVariables
-import StaticArrays
 
 import Base.show
 
@@ -115,6 +114,7 @@ function HydroModel(connections::Array{Connection,1}, precip::Function)
 
     # construct routing matrix
     routing, reservoirs = MiniFlex.routing_mat(connections)
+    N = size(routing, 1)
 
     # check routing
     tot_fraction = sum(routing + I, dims=1)
@@ -123,9 +123,8 @@ function HydroModel(connections::Array{Connection,1}, precip::Function)
               reservoirs[tot_fraction[1,:] .> 1])
     end
 
-    # convert routing matrix to static Array
-    N = size(routing, 1)
-    routing = StaticArrays.SMatrix{N,N}(routing)
+    # convert routing matrix to static Array (needs more Benchmarking!)
+    # routing = StaticArrays.SMatrix{N,N}(routing)
 
     # define parameter transformation: Real vector -> NamedTuple
     θtransform = as((
@@ -136,10 +135,12 @@ function HydroModel(connections::Array{Connection,1}, precip::Function)
     # define ODE for all storages (p is a NamedTuple)
     function dV(dV,V,p,t)
         # calculate flows
-        outQ = Q.(V, t, p.θflow)
-        dV .= precip(t) .+ routing*Q.(V, t, p.θflow)
+        outQ = Q.(V, t, p.θflow)                  # bad: the only allocation
+        dV .= routing*outQ
+        # add preciptation
+        dV .+= precip(t)                          # good: no allocation
         # substract evapotranspiration
-        dV .-= evapotranspiration.(V, t, p.θevap)
+        dV .-= evapotranspiration.(V, t, p.θevap) # good: no alloccation
     end
 
     HydroModel(reservoirs, precip, θtransform, routing, connections, dV)
