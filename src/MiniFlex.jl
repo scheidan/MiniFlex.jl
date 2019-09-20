@@ -82,7 +82,7 @@ function routing_mat(fpaths)
         push!(all_reservoirs, fp.reservoirs[1])
         push!(all_reservoirs, fp.reservoirs[2])
     end
-    unique!(all_reservoirs)
+    sort!(unique!(all_reservoirs))
 
     # Build adjacency Matrix
     M = zeros(length(all_reservoirs), length(all_reservoirs))
@@ -156,7 +156,8 @@ end
 where
 - `connections::Array`: array of `Connection`s to define reservoir connections
 - `precip::Function`: function that returns a vector of rain intensities
-                      for  each reservoir at any given time point. Takes time as argument.
+                      for each reservoir at any given time point. Takes time as argument.
+                      Note, reservoirs are alphabetically sorted.
 
 
 ### Example of routing
