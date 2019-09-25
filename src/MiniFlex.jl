@@ -63,10 +63,16 @@ end
 # Type for flow connection
 
 struct Connection
-    reservoirs::Pair
-    fraction::Real
+    reservoirs::Pair{Symbol, Vector{Symbol}}
+    fraction::Vector{Real}
+    function Connection(reservoirs, fraction)
+        length(reservoirs[2]) != length(fraction) && error("Number of routing fractions does not match!")
+        sum(fraction) ≈ 1 ? new(reservoirs, fraction) : error("The fraction of the outflows must sum up to 1!")
+    end
 end
-Connection(reservoirs::Pair) = Connection(reservoirs, 1)
+
+Connection(r::Pair{Symbol, Symbol}) = Connection(r[1] => [r[2]])
+Connection(r::Pair{Symbol, Vector{Symbol}}) = Connection(r, normalize(ones(length(r[2])),1))
 
 # pretty printing short
 function Base.show(io::IO, con::Connection)
@@ -76,19 +82,22 @@ end
 
 function routing_mat(fpaths)
     # get all reservoirs
-    all_reservoirs = []
+    all_reservoirs = Symbol[]
     for fp in fpaths
         push!(all_reservoirs, fp.reservoirs[1])
-        push!(all_reservoirs, fp.reservoirs[2])
+        append!(all_reservoirs, fp.reservoirs[2])
     end
     sort!(unique!(all_reservoirs))
 
     # Build adjacency Matrix
-    M = zeros(length(all_reservoirs), length(all_reservoirs))
+    n = length(all_reservoirs)
+    M = zeros(n, n)
     for fp in fpaths
-        from_idx = findfirst(fp.reservoirs[1] .== all_reservoirs)
-        to_idx = findfirst(fp.reservoirs[2] .== all_reservoirs)
-        M[to_idx, from_idx] = fp.fraction
+        for i in 1:length(fp.reservoirs[2])
+            from_idx = findfirst(fp.reservoirs[1] .== all_reservoirs)
+            to_idx = findfirst(fp.reservoirs[2][i] .== all_reservoirs)
+            M[to_idx, from_idx] = fp.fraction[i]
+        end
     end
     M = M - I
 
@@ -113,7 +122,7 @@ end
 function HydroModel(connections::Array{Connection,1}, precip::Function)
 
     # construct routing matrix
-    routing, reservoirs = MiniFlex.routing_mat(connections)
+    routing, reservoirs = routing_mat(connections)
     N = size(routing, 1)
 
     # check routing
@@ -165,10 +174,9 @@ where
 
 We have four reservoirs S1, S2, S3, S4 (any other names could be used):
 ```julia
-[Connection(:S1 => :S2, 0.6),  # 60% off S1 flows to S2
- Connection(:S2 => :S3, 0.4),
- Connection(:S1 => :S3),       # default is 100%
- Connection(:S3 => :S4)]
+[Connection(:S1 => [:S2, :S3], [0.8, 0.2]), # 80% outflow to :S1, 20% to :S3
+ Connection(:S2 => [:S3, :S5]),             # default is equal distribution, i.e. 50% and 50%
+ Connection(:S3 => :S4)]                    # 100% to :S4
 ```
 
 ## Run a HydroModel
@@ -192,9 +200,8 @@ Example:
 ## 1) define model
 
 my_model = HydroModel(
-    [Connection(:S1 => :S2, 0.6),   # the names :S1 and :S2 are arbitrary
-     Connection(:S2 => :S3, 0.4),
-     Connection(:S1 => :S3),
+    [Connection(:S1 => [:S2, :S3], [0.8, 0.2]),  # the names :S1, :S2, ... are arbitrary
+     Connection(:S2 => :S3),
      Connection(:S3 => :S4)],
     ## precipitation(t)
     precip

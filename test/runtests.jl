@@ -11,6 +11,14 @@ import TransformVariables
 import Interpolations
 import ForwardDiff
 
+@testset "Connection" begin
+
+    @test_throws ErrorException Connection(:S1 => [:S2, :S3], [0.8, 0.5])
+    @test_throws ErrorException Connection(:S1 => [:S2, :S3], [0.8, 0.1])
+    @test_throws ErrorException Connection(:S1 => [:S2, :S3], [0.8, 0.1, 0.1])
+
+end
+
 @testset "Integration tests" begin
 
     # -----------
@@ -33,19 +41,9 @@ import ForwardDiff
     # define model
 
     test_model = HydroModel(
-        [Connection(:S1 => :S2, 0.5),
+        [Connection(:S1 => [:S2, :S3], [0.8, 0.2]),
          Connection(:S2 => :S3),
-         Connection(:S1 => :S3, 0.5),
          Connection(:S3 => :S4)],
-        # preciptation(t)
-        precip
-    )
-
-    # too much outflow of S1
-    @test_throws ErrorException HydroModel(
-        [Connection(:S1 => :S2, 0.5),
-         Connection(:S2 => :S3),
-         Connection(:S1 => :S3, 0.8)],
         # preciptation(t)
         precip
     )
