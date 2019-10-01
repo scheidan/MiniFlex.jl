@@ -52,6 +52,8 @@ function Base.show(io::IO, ::MIME"text/plain", sol::ModelSolution)
     println(io, "   $(sol.θ.θflow)")
     println(io, " θevap:")
     println(io, "   $(sol.θ.θevap)")
+    println(io, " θrouting:")
+    println(io, "   $(sol.θ.θrouting)")
 
     println(io, "\nFlows and evapotranspiration time series can be obtained with\n"
             * " Q(solution, time_range)\n"
@@ -72,7 +74,10 @@ struct Connection
 end
 
 Connection(r::Pair{Symbol, Symbol}) = Connection(r[1] => [r[2]])
-Connection(r::Pair{Symbol, Vector{Symbol}}) = Connection(r, normalize(ones(length(r[2])),1))
+function Connection(r::Pair{Symbol, Vector{Symbol}})
+    sort!(r[2])
+    Connection(r, normalize(ones(length(r[2])),1))
+end
 
 # pretty printing short
 function Base.show(io::IO, con::Connection)
@@ -91,15 +96,14 @@ function routing_mat(fpaths)
 
     # Build adjacency Matrix
     n = length(all_reservoirs)
-    M = zeros(n, n)
+    M = zeros(Bool, n, n)
     for fp in fpaths
         for i in 1:length(fp.reservoirs[2])
             from_idx = findfirst(fp.reservoirs[1] .== all_reservoirs)
             to_idx = findfirst(fp.reservoirs[2][i] .== all_reservoirs)
-            M[to_idx, from_idx] = fp.fraction[i]
+            M[to_idx, from_idx] = true
         end
     end
-    M = M - I
 
     M, all_reservoirs
 end
@@ -113,7 +117,7 @@ struct HydroModel
     reservoirs::Array
     precip::Function
     θtransform::TransformVariables.AbstractTransform
-    routing::AbstractMatrix
+    mask_routing::BitArray{2}
     connections::Array{Connection,1}
     dV::Function
 end
@@ -121,28 +125,23 @@ end
 
 function HydroModel(connections::Array{Connection,1}, precip::Function)
 
-    # construct routing matrix
-    routing, reservoirs = routing_mat(connections)
-    N = size(routing, 1)
+    # construct mask routing matrix
+    mask_routing, reservoirs = routing_mat(connections)
+    N = size(mask_routing, 1)
 
-    # check routing
-    tot_fraction = sum(routing + I, dims=1)
-    if(any(tot_fraction .> 1 + eps()))
-        error("You cannot define more than 100% total outflow! Check reservoirs(s): ",
-              reservoirs[tot_fraction[1,:] .> 1])
-    end
-
-    # convert routing matrix to static Array (needs more Benchmarking!)
-    # routing = StaticArrays.SMatrix{N,N}(routing)
+    # connections
+    sort!(connections, lt=(a,b) -> a.reservoirs[1] < b.reservoirs[1])
+    Nout = [length(c.fraction) for c in connections] # number of outgoing connections
 
     # define parameter transformation: Real vector -> NamedTuple
     θtransform = as((
-        θflow = as(Vector, as(Vector, asℝ₊, 2), N),
-        θevap = as(Vector, as(Vector, asℝ₊, 2), N)
+        θflow = as(Tuple(as(Vector, asℝ₊, 2) for _ in 1:N)),
+        θevap = as(Tuple(as(Vector, asℝ₊, 2) for _ in 1:N)),
+        θrouting = as(Tuple(UnitSimplex(n) for n in Nout))
     ))
 
     # define ODE for all storages (p is a NamedTuple)
-    function dV(dV,V,p,t)
+    function dV(dV, V, p, t, routing)
         # calculate flows
         outQ = Q.(V, t, p.θflow)                  # bad: the only allocation
         dV .= routing*outQ
@@ -152,7 +151,7 @@ function HydroModel(connections::Array{Connection,1}, precip::Function)
         dV .-= evapotranspiration.(V, t, p.θevap) # good: no alloccation
     end
 
-    HydroModel(reservoirs, precip, θtransform, routing, connections, dV)
+    HydroModel(reservoirs, precip, θtransform, mask_routing, connections, dV)
 end
 
 
@@ -200,7 +199,7 @@ Example:
 ## 1) define model
 
 my_model = HydroModel(
-    [Connection(:S1 => [:S2, :S3], [0.8, 0.2]),  # the names :S1, :S2, ... are arbitrary
+    [Connection(:S1 => [:S2, :S3]),  # the names :S1, :S2, ... are arbitrary
      Connection(:S2 => :S3),
      Connection(:S3 => :S4)],
     ## precipitation(t)
@@ -209,19 +208,23 @@ my_model = HydroModel(
 
 ## 2) run model
 
-p = (θflow = [[0.1, 0.01],    # Q1
-              [0.05, 0.01],   # Q2
-               [0.02, 0.01],  # Q3
-               [0.01, 0.01]], # Q4
-      θevap = [[0.1, 0.01],   # evapo 1
-               [0.05, 0.01],  # evapo 2
-               [0.02, 0.01],  # evapo 3
-               [0.01, 0.01]]) # evapo 4
+p = (θflow = ([0.1, 0.01],
+              [0.5, 0.01],
+              [0.2, 0.01],
+              [0.01, 0.01]),
+     θevap = ([0.1, 0.01],
+              [0.05, 0.01],
+              [0.02, 0.01],
+              [0.01, 0.01]),
+     θrouting = ([0.3, 0.7], # connection from :S1
+                 [1.0],      # connection from :S2
+                 [1.0])      # connection from :S3
+     )
 
 V0 = zeros(4)   # inital storage
 
 sol = my_model(p, V0, 0:10.0:1000) # default solver
-sol2 = my_model(randn(16), V0, 0:10.0:1000) # call with parameter vector
+sol2 = my_model(randn(17), V0, 0:10.0:1000) # call with parameter vector
 sol3 = my_model(p, V0, 0:10.0:1000, ImplicitMidpoint(), reltol=1e-3, dt=5)
 
 plot(sol) # requires `Plots` to by loaded
@@ -234,8 +237,14 @@ evapotranspiration(sol, t_obs)
 """
 function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
 
-    # check dimensions
-    n_storages = size(m.routing, 1)
+    # check parameters
+    n_storages = size(m.mask_routing, 1)
+
+    for k in [:θflow, :θevap, :θrouting]
+        if  !(k in keys(p))
+            error("Parameters must contain a field '$(k)'")
+        end
+    end
 
     if(!(length(p.θflow) == length(p.θevap) == n_storages))
         error("Parameter dimensions are not matching the number " *
@@ -252,9 +261,28 @@ function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
               "as the number of storages ($(n_storages))!")
     end
 
+    if(length(p.θrouting) != length(m.connections))
+        error("Routing parameters (θrouting):", ("\n - $(p)" for p in p.θrouting)...,
+              "\ndo not match connections:", ("\n - $(c)" for c in m.connections)..., "\n")
+    end
+
+    for i in 1:length(p.θrouting)
+        if length(p.θrouting[i]) != length(m.connections[i].fraction)
+            error("Parameters ($(p.θrouting[i])) do not match connection:\n",
+                  m.connections[i])
+        end
+    end
+
+    # construct routing matrix and connection
+    routing = zeros(eltype(p.θflow[1]), n_storages, n_storages) - I
+    for i in 1:length(p.θrouting)
+        routing[m.mask_routing[:,i], i] .= p.θrouting[i]
+        m.connections[i].fraction .= p.θrouting[i]
+    end
+
     # solve ode
-    prob = ODEProblem(m.dV,
-                      nested_eltype(p).(V0),
+    prob = ODEProblem((dV,V,p,t) -> m.dV(dV,V,p,t,routing),
+                      nested_eltype(p.θflow).(V0),
                       (minimum(time), maximum(time)),
                       p)
     sol = solve(prob, args...; saveat=time, kwargs...)
@@ -269,13 +297,13 @@ end
 
 # pretty printing short
 function Base.show(io::IO, m::HydroModel)
-    print(io, "HydroModel ($(size(m.routing,1)) reservoirs)")
+    print(io, "HydroModel ($(size(m.mask_routing,1)) reservoirs)")
 end
 
 # pretty printing verbose
 function Base.show(io::IO, ::MIME"text/plain", m::HydroModel)
 
-    println(io, "HydroModel model with $(size(m.routing,1)) reservoirs connected by:")
+    println(io, "HydroModel model with $(size(m.mask_routing,1)) reservoirs connected by:")
     for f in m.connections
         println(io, " ", f)
     end
@@ -326,7 +354,7 @@ end
 
 function nested_eltype(x)
     y = eltype(x)
-    while y <: AbstractArray
+    while y <: Union{AbstractArray, Tuple}
         y = eltype(y)
     end
     return(y)

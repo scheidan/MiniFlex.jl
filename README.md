@@ -59,7 +59,7 @@ precip(t) = StaticArrays.@SVector [rain(t), 0.0, 0.0, 0.0]  # using SVector avoi
 # define model
 
 my_model = HydroModel(
-    [Connection(:S1 => [:S2, :S3], [0.8, 0.2]),  # from :S1 goes 80% to :S2 and 20% to :S3
+    [Connection(:S1 => [:S2, :S3]),  # from :S1 goes 80% to :S2 and 20% to :S3
      Connection(:S2 => :S3),
      Connection(:S3 => :S4)],
 
@@ -75,14 +75,18 @@ my_model
 
 
 # define a NamedTuple for parameters
-p = (θflow = [[0.1, 0.01],
+p = (θflow = ([0.1, 0.01],
+              [0.5, 0.01],
+              [0.2, 0.01],
+              [0.01, 0.01]),
+     θevap = ([0.1, 0.01],
               [0.05, 0.01],
-               [0.02, 0.01],
-               [0.01, 0.01]],
-      θevap = [[0.1, 0.01],
-               [0.05, 0.01],
-               [0.02, 0.01],
-               [0.01, 0.01]])
+              [0.02, 0.01],
+              [0.01, 0.01]),
+     θrouting = ([0.3, 0.7], # connection from :S1
+                 [1.0],      # connection from :S2
+                 [1.0])      # connection from :S3
+     )
 
 
 sol = my_model(p, zeros(4), 0:10.0:1000,
@@ -101,7 +105,7 @@ sol = my_model(v, zeros(4), 0:10.0:1000,
                reltol=1e-3);
 
 # Note, `v` can contain values from -Inf to Inf. The parameters are
-# automatically transformed to correct parameter space if needed.
+# automatically transformed to the correct parameter space.
 
 
 # -----------
