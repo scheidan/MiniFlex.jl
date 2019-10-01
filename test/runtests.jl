@@ -43,10 +43,21 @@ end
                  [1.0],
                  [1.0])
             )
-
     @test_throws ErrorException test_model(pbad, zeros(4), 0:10.0:1000)
 
-    # wrong paramter dims
+    # routing does not sum to 1
+    pbad = (θflow = ([0.1, 0.01],
+                     [0.05, 0.01]),
+            θevap = ([0.1, 0.01],
+                     [0.05, 0.01],
+                     [0.02, 0.01],
+                     [0.01, 0.01]),
+            θrouting = ([0.3, 0.3], # <--
+                        [1.0])
+            )
+    @test_throws ErrorException test_model(pbad, zeros(4), 0:10.0:1000)
+
+    # wrong parameter dims
     pbad = (θflow = ([0.1, 0.01],
                      [0.05, 0.01]), # <--
             θevap = ([0.1, 0.01],

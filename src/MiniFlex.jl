@@ -271,6 +271,10 @@ function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
             error("Parameters ($(p.θrouting[i])) do not match connection:\n",
                   m.connections[i])
         end
+        if sum(p.θrouting[i]) ≉ 1
+            error("Parameters ($(p.θrouting[i])) do not sum to one, see connection:\n",
+                  m.connections[i])
+        end
     end
 
     # construct routing matrix and connection
