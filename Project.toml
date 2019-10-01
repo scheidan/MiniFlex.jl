@@ -10,6 +10,7 @@ Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 TransformVariables = "84d833dd-6860-57f9-a1a7-6da5db126cff"
 
 [compat]
+TransformVariables = ">= 0.3.8"
 julia = "1"
 
 [extras]
