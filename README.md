@@ -59,7 +59,7 @@ precip(t) = StaticArrays.@SVector [rain(t), 0.0, 0.0, 0.0]  # using SVector avoi
 # define model
 
 my_model = HydroModel(
-    [Connection(:S1 => [:S2, :S3]),  # from :S1 goes 80% to :S2 and 20% to :S3
+    [Connection(:S1 => [:S2, :S3]),  # outflow from :S1 to :S2 and :S3
      Connection(:S2 => :S3),
      Connection(:S3 => :S4)],
 
