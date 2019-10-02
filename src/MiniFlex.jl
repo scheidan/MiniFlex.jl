@@ -321,11 +321,17 @@ end
 # -----------
 # functions for flow and evapotranspiration
 
-# N.B. THIS FUNCTION DO PROBABLY NOT MAKE MUCH SENSE!!!
-
+# see e.g.
+# Fenicia, F., Kavetski, D., Savenije, H.H.G., Clark, M.P.,
+# Schoups, G., Pfister, L., Freer, J., 2014. Catchment properties,
+# function, and conceptual model representation: is there a
+# correspondence? Hydrological Processes 28,
+# 2451–2467. https://doi.org/10.1002/hyp.9726
 
 function Q(V, t, θ)
-    θ[1]*(1+θ[2])^V
+    # basically just θ[1]*V^θ[2]
+    # but assuring numerically stability
+    θ[1] * (abs(V) + eps(V))^(θ[2])
 end
 
 @doc """
@@ -337,6 +343,7 @@ function Q(modsol::ModelSolution, time)
     hcat([Q.(modsol.solution(t), t, modsol.θ.θflow) for t in time]...)
 end
 
+# N.B. THIS FUNCTION DO PROBABLY NOT MAKE MUCH SENSE!!!
 
 function evapotranspiration(V, t, θ)
     θ[1]*V/(V+θ[2])
