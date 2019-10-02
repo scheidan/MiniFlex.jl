@@ -141,14 +141,14 @@ function HydroModel(connections::Array{Connection,1}, precip::Function)
     ))
 
     # define ODE for all storages (p is a NamedTuple)
-    function dV(dV, V, p, t, routing)
+    function dV(dV, V, p, t, routing, outQ)
         # calculate flows
-        outQ = Q.(V, t, p.θflow)                  # bad: the only allocation
+        outQ .= Q.(V, t, p.θflow)
         dV .= routing*outQ
         # add preciptation
-        dV .+= precip(t)                          # good: no allocation
+        dV .+= precip(t)
         # substract evapotranspiration
-        dV .-= evapotranspiration.(V, t, p.θevap) # good: no alloccation
+        dV .-= evapotranspiration.(V, t, p.θevap)
     end
 
     HydroModel(reservoirs, precip, θtransform, mask_routing, connections, dV)
@@ -285,7 +285,8 @@ function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
     end
 
     # solve ode
-    prob = ODEProblem((dV,V,p,t) -> m.dV(dV,V,p,t,routing),
+    outQ = zeros(eltype(p.θflow[1]), n_storages)
+    prob = ODEProblem((dV,V,p,t) -> m.dV(dV,V,p,t,routing, outQ),
                       nested_eltype(p.θflow).(V0),
                       (minimum(time), maximum(time)),
                       p)
