@@ -196,6 +196,8 @@ end
 
     @test 0.0 < loss(p, flow_data[:,1], flow_data[:,2])
     @test 0.0 < loss(v, flow_data[:,1], flow_data[:,2])
-    @test length(v) == length(loss_grad(v, flow_data[:,1], flow_data[:,2]))
+    g = loss_grad(v, flow_data[:,1], flow_data[:,2])
+    @test length(v) == length(g)
+    @test all(abs.(g) .!= Inf)
 
 end
