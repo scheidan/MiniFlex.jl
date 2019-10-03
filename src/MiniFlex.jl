@@ -12,12 +12,12 @@ import Reexport
 Reexport.@reexport using DifferentialEquations
 using LinearAlgebra
 using TransformVariables
-
+%
 import Base.show
 
 export HydroModel
 export Connection
-export Q, evapotranspiration
+export Q, ET
 
 
 # -----------
@@ -55,9 +55,8 @@ function Base.show(io::IO, ::MIME"text/plain", sol::ModelSolution)
     println(io, " θrouting:")
     println(io, "   $(sol.θ.θrouting)")
 
-    println(io, "\nFlows and evapotranspiration time series can be obtained with:\n"
-            * " Q(solution, time_range)\n"
-            * " evapotranspiration(solution, time_range)")
+    println(io, "\nFlows time series can be obtained with:\n"
+            * " Q(solution, time_range)")
 end
 
 
@@ -114,7 +113,8 @@ end
 
 struct HydroModel
     reservoirs::Array
-    precip::Function
+    P_rate::Function
+    PET_rate::Function
     θtransform::TransformVariables.AbstractTransform
     routing_mask::BitArray{2}
     connections::Array{Connection,1}
@@ -122,7 +122,7 @@ struct HydroModel
 end
 
 
-function HydroModel(connections::Array{Connection,1}, precip::Function)
+function HydroModel(; connections::Array{Connection,1}, P_rate::Function, PET_rate::Function)
 
     # construct mask routing matrix
     routing_mask, reservoirs = routing_mat(connections)
@@ -145,12 +145,12 @@ function HydroModel(connections::Array{Connection,1}, precip::Function)
         outQ .= Q.(V, t, p.θflow)
         dV .= routing*outQ
         # add preciptation
-        dV .+= precip(t)
+        dV .+= P_rate(t)
         # substract evapotranspiration
-        dV .-= evapotranspiration.(V, t, p.θevap)
+        dV .-= ET.(V, PET_rate(t), t, p.θevap)
     end
 
-    HydroModel(reservoirs, precip, θtransform, routing_mask, connections, dV)
+    HydroModel(reservoirs, P_rate, PET_rate, θtransform, routing_mask, connections, dV)
 end
 
 
@@ -159,22 +159,25 @@ end
 
 ## Model definition
 
-  HydroModel(connections::Array{Connection,1}, precip::Function)
+  HydroModel(connections::Array{Connection,1}, P_rate::Function, PET_rate::Function)
 
 where
 - `connections::Array`: array of `Connection`s to define reservoir connections
-- `precip::Function`: function that returns a vector of rain intensities
-                      for each reservoir at any given time point. Takes time as argument.
-                      Note, reservoirs are alphabetically sorted.
+- `P_rate::Function`:   function that returns a vector of rain intensities
+                        for each reservoir at any given time point. Takes time as argument.
+                        Note, reservoirs are alphabetically sorted.
+- `PEV_rate::Function`: function that returns a vector of the potential evapotranspiration (PET)
+                        for each reservoir at any given time point. Takes time as argument.
+                        Note, reservoirs are alphabetically sorted.
 
 
 ### Example of routing
 
 We have four reservoirs S1, S2, S3, S4 (any other names could be used):
 ```julia
-[Connection(:S1 => [:S2, :S3], [0.8, 0.2]), # 80% outflow to :S1, 20% to :S3
- Connection(:S2 => [:S3, :S5]),             # default is equal distribution, i.e. 50% and 50%
- Connection(:S3 => :S4)]                    # 100% to :S4
+[Connection(:S1 => [:S2, :S3]),
+ Connection(:S2 => [:S3, :S5]),
+ Connection(:S3 => :S4)]
 ```
 
 ## Run a HydroModel
@@ -198,23 +201,23 @@ Example:
 ## 1) define model
 
 my_model = HydroModel(
-    [Connection(:S1 => [:S2, :S3]),  # the names :S1, :S2, ... are arbitrary
-     Connection(:S2 => :S3),
-     Connection(:S3 => :S4)],
-    ## precipitation(t)
-    precip
+    connections = [Connection(:S2 => :S3),
+                   Connection(:S1 => [:S3, :S2]),
+                   Connection(:S3 => :S4)],
+    P_rate = P_rate,        # precipitation
+    PET_rate = PET_rate     # potential evapotranspiration
 )
 
 ## 2) run model
 
-p = (θflow = ([0.1, 0.01],
-              [0.5, 0.01],
-              [0.2, 0.01],
-              [0.01, 0.01]),
-     θevap = ([0.1, 0.01],
-              [0.05, 0.01],
-              [0.02, 0.01],
-              [0.01, 0.01]),
+p = (θflow = ([0.1, 1.1],
+              [0.1, 0.9],
+              [0.1, 1.2],
+              [0.1, 1.0]),
+     θevap = ([1.0, 20.0],
+              [2.2, 20.0],
+              [3.3, 20.0],
+              [2.2, 20.0]),
      θrouting = ([0.3, 0.7], # connection from :S1
                  [1.0],      # connection from :S2
                  [1.0])      # connection from :S3
@@ -228,10 +231,9 @@ sol3 = my_model(p, V0, 0:10.0:1000, ImplicitMidpoint(), reltol=1e-3, dt=5)
 
 plot(sol) # requires `Plots` to by loaded
 
-# extract run-off and evapotranspiration
+# extract run-off time-series (note, time points can be different)
 t_obs = 10:2.5:100
 Q(sol, t_obs)
-evapotranspiration(sol, t_obs)
 ```
 """
 function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
@@ -250,7 +252,7 @@ function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
               "of storages ($(n_storages))!")
     end
 
-    if(length(m.precip(minimum(time))) != n_storages)
+    if(length(m.P_rate(minimum(time))) != n_storages)
         error("Precipitation function must return a vector of the same length " *
               "as the number of storages ($(n_storages))!")
     end
@@ -318,9 +320,9 @@ end
 
 
 # -----------
-# functions for flow and evapotranspiration
+# constitutive functions for flow and evapotranspiration
 
-# see e.g.
+# see:.
 # Fenicia, F., Kavetski, D., Savenije, H.H.G., Clark, M.P.,
 # Schoups, G., Pfister, L., Freer, J., 2014. Catchment properties,
 # function, and conceptual model representation: is there a
@@ -328,9 +330,7 @@ end
 # 2451–2467. https://doi.org/10.1002/hyp.9726
 
 function Q(V, t, θ)
-    # basically just θ[1]*V^θ[2]
-    # but assuring numerically stability
-    θ[1] * (abs(V) + eps(V))^(θ[2])
+    V <= 0 ? zero(V) : θ[1] * V^θ[2]
 end
 
 @doc """
@@ -342,21 +342,10 @@ function Q(modsol::ModelSolution, time)
     hcat([Q.(modsol.solution(t), t, modsol.θ.θflow) for t in time]...)
 end
 
-# N.B. THIS FUNCTIONS DO PROBABLY NOT MAKE MUCH SENSE!!!
 
-function evapotranspiration(V, t, θ)
-    θ[1]*V/(V+θ[2])
+function ET(V, PET, t, θ)
+    V <= 0 ? zero(V) : θ[1] * PET * (1 - exp(-V/θ[2]))
 end
-
-@doc """
-# Calculate evapotranspiration for each reservoir at give point in time
-
-    evapotranspiration(sol::ModelSolution, time)
-"""
-function evapotranspiration(modsol::ModelSolution, time)
-    hcat([evapotranspiration.(modsol.solution(t), t, modsol.θ.θevap) for t in time]...)
-end
-
 
 
 # -----------

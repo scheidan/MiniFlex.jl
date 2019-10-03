@@ -32,7 +32,7 @@ in time based on differential equations. The most important design goals are:
 
 ## Usage
 
-TODO!
+TODO
 The example below is mainly a placeholder.
 
 ``` julia
@@ -63,8 +63,8 @@ my_model = HydroModel(
      Connection(:S2 => :S3),
      Connection(:S3 => :S4)],
 
-    ## precipitation(t)
-    precip
+    P_rate = precip,
+    PET_rate = x -> zeros(4)  # no evapotranspiration
 )
 
 
@@ -79,10 +79,10 @@ p = (θflow = ([0.1, 0.01],
               [0.5, 0.01],
               [0.2, 0.01],
               [0.01, 0.01]),
-     θevap = ([0.1, 0.01],
-              [0.05, 0.01],
-              [0.02, 0.01],
-              [0.01, 0.01]),
+     θevap = ([1.0, 20.0],
+              [2.2, 20.0],
+              [3.3, 20.0],
+              [2.2, 20.0]),
      θrouting = ([0.3, 0.7], # connection from :S1
                  [1.0],      # connection from :S2
                  [1.0])      # connection from :S3
@@ -93,6 +93,11 @@ sol = my_model(p, zeros(4), 0:10.0:1000,
                reltol=1e-3);
 
 sol
+
+# extract runoff for each reservoir
+t_obs = 0:22.:1000
+Q(sol, t_obs)
+
 
 # any additional arguments are passed to DifferentialEquations.solve(). E.g.
 sol = my_model(p, zeros(4), 0:10.0:1000,

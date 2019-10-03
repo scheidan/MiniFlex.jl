@@ -22,11 +22,12 @@ end
 @testset "Parameter dimension test" begin
 
     test_model = HydroModel(
-        [Connection(:S1 => [:S2, :S3]),
-         Connection(:S2 => :S3),
-         Connection(:S3 => :S4)],
+        connections = [Connection(:S1 => [:S2, :S3]),
+                       Connection(:S2 => :S3),
+                       Connection(:S3 => :S4)],
         # preciptation(t)
-        t -> ones(4)
+        P_rate = t -> ones(4),
+        PET_rate = t -> ones(4)
     )
 
     # wrong names
@@ -118,7 +119,7 @@ end
     rain = Interpolations.LinearInterpolation(t_rain, rain_obs,
                                               extrapolation_bc = 0)
     # must return the input for each storage at time t
-    precip(t) = [rain(t), 0.0, 0.0, 0.0]
+    P_rate(t) = [rain(t), 0.0, 0.0, 0.0]
 
     # "observations" of Q3
     flow_data = collect(hcat([ifelse(t < 600, [t,50.0], [t, 0.0]) for t in 1:101:1000.0]...)')
@@ -128,11 +129,11 @@ end
     # define model
 
     test_model = HydroModel(
-        [Connection(:S1 => [:S2, :S3]),
-         Connection(:S2 => :S3),
-         Connection(:S3 => :S4)],
-        # preciptation(t)
-        precip
+        connections = [Connection(:S1 => [:S2, :S3]),
+                       Connection(:S2 => :S3),
+                       Connection(:S3 => :S4)],
+        P_rate = P_rate,
+        PET_rate = t -> ones(4)
     )
 
     # define parameter tuple to test
@@ -140,10 +141,10 @@ end
                   [0.1, 0.9],
                   [0.1, 1.2],
                   [0.1, 1.0]),
-         θevap = ([0.1, 0.01],
-                  [0.05, 0.01],
-                  [0.02, 0.01],
-                  [0.01, 0.01]),
+         θevap = ([1.0, 20.0],
+                  [2.2, 20.0],
+                  [3.3, 20.0],
+                  [2.2, 20.0]),
          θrouting = ([0.7, 0.3],
                      [1.0],
                      [1.0])
@@ -167,8 +168,7 @@ end
     @test isapprox(Q(sol1, t_obs), Q(sol2, t_obs), rtol=0.01)
 
     @test size(Q(sol1, t_obs)) == (4, length(t_obs))
-    @test size(evapotranspiration(sol1, t_obs)) == (4, length(t_obs))
-
+    @test all( Q(sol1, t_obs) .>= 0)
 
     # -----------
     # test compatibility with ForwarDiff
