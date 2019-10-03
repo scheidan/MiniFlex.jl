@@ -55,7 +55,7 @@ function Base.show(io::IO, ::MIME"text/plain", sol::ModelSolution)
     println(io, " θrouting:")
     println(io, "   $(sol.θ.θrouting)")
 
-    println(io, "\nFlows and evapotranspiration time series can be obtained with\n"
+    println(io, "\nFlows and evapotranspiration time series can be obtained with:\n"
             * " Q(solution, time_range)\n"
             * " evapotranspiration(solution, time_range)")
 end
@@ -66,22 +66,21 @@ end
 
 struct Connection
     reservoirs::Pair{Symbol, Vector{Symbol}}
-    fraction::Vector{Real}
-    function Connection(reservoirs, fraction)
-        length(reservoirs[2]) != length(fraction) && error("Number of routing fractions does not match!")
-        sum(fraction) ≈ 1 ? new(reservoirs, fraction) : error("The fraction of the outflows must sum up to 1!")
+    function Connection(r::Pair{Symbol, Vector{Symbol}})
+        sort!(r[2])
+        new(r)
     end
 end
 
 Connection(r::Pair{Symbol, Symbol}) = Connection(r[1] => [r[2]])
-function Connection(r::Pair{Symbol, Vector{Symbol}})
-    sort!(r[2])
-    Connection(r, normalize(ones(length(r[2])),1))
-end
+
 
 # pretty printing short
 function Base.show(io::IO, con::Connection)
-    print(io, con.reservoirs[1], " → ", con.reservoirs[2], " ($(con.fraction))")
+    print(io, con.reservoirs[1], " → ")
+    for (i,s) in enumerate(con.reservoirs[2])
+        i == 1 ? print(s) : print(", ", s)
+    end
 end
 
 
@@ -131,7 +130,7 @@ function HydroModel(connections::Array{Connection,1}, precip::Function)
 
     # connections
     sort!(connections, lt=(a,b) -> a.reservoirs[1] < b.reservoirs[1])
-    Nout = [length(c.fraction) for c in connections] # number of outgoing connections
+    Nout = [length(c.reservoirs[2]) for c in connections] # number of outgoing connections
 
     # define parameter transformation: Real vector -> NamedTuple
     θtransform = as((
@@ -267,7 +266,7 @@ function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
     end
 
     for i in 1:length(p.θrouting)
-        if length(p.θrouting[i]) != length(m.connections[i].fraction)
+        if length(p.θrouting[i]) != length(m.connections[i].reservoirs[2])
             error("Parameters ($(p.θrouting[i])) do not match connection:\n",
                   m.connections[i])
         end
@@ -277,11 +276,10 @@ function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
         end
     end
 
-    # construct routing matrix and connection
+    # construct routing matrix
     routing = zeros(eltype(p.θflow[1]), n_storages, n_storages) - I
     for i in 1:length(p.θrouting)
         routing[m.mask_routing[:,i], i] .= p.θrouting[i]
-        m.connections[i].fraction .= p.θrouting[i]
     end
 
     # solve ode
@@ -312,7 +310,7 @@ function Base.show(io::IO, ::MIME"text/plain", m::HydroModel)
     for f in m.connections
         println(io, " ", f)
     end
-    println(io, "\nThe parameters must be ordered as:")
+    println(io, "\nParameters and outputs are ordered as:")
     for (i, r) in enumerate(m.reservoirs)
         i==1 ? print(io, " $i: ", r) : print(io, ", $i: ", r)
     end

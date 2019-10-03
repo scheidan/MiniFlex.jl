@@ -12,11 +12,10 @@ import Interpolations
 import ForwardDiff
 
 @testset "Connection" begin
-
-    @test_throws ErrorException Connection(:S1 => [:S2, :S3], [0.8, 0.5])
-    @test_throws ErrorException Connection(:S1 => [:S2, :S3], [0.8, 0.1])
-    @test_throws ErrorException Connection(:S1 => [:S2, :S3], [0.8, 0.1, 0.1])
-
+    c = Connection(:S1 => [:b, :a, :c])
+    @test c.reservoirs[2] == [:a, :b, :c]
+    c = Connection(:S1 => :out)
+    @test c.reservoirs[2] == [:out]
 end
 
 
