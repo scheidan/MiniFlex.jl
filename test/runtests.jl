@@ -151,8 +151,7 @@ end
 
 
     # the coresponding parameter vector
-    # v = TransformVariables.inverse(test_model.θtransform, p) # due to current bug in TransformVariables
-    v = randn(TransformVariables.dimension(test_model.θtransform))
+    v = TransformVariables.inverse(test_model.θtransform, p)
 
     # wrong dims of initial
     @test_throws ErrorException test_model(p, zeros(2), 0:10.0:1000)
@@ -165,7 +164,7 @@ end
                       reltol=1e-5)
 
     t_obs = 0:50:1000
-    # @test isapprox(Q(sol1, t_obs), Q(sol2, t_obs), rtol=0.01) # due to current bug in TransformVariables
+    @test isapprox(Q(sol1, t_obs), Q(sol2, t_obs), rtol=0.01)
 
     @test size(Q(sol1, t_obs)) == (4, length(t_obs))
     @test size(evapotranspiration(sol1, t_obs)) == (4, length(t_obs))

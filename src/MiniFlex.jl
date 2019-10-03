@@ -342,7 +342,7 @@ function Q(modsol::ModelSolution, time)
     hcat([Q.(modsol.solution(t), t, modsol.θ.θflow) for t in time]...)
 end
 
-# N.B. THIS FUNCTION DO PROBABLY NOT MAKE MUCH SENSE!!!
+# N.B. THIS FUNCTIONS DO PROBABLY NOT MAKE MUCH SENSE!!!
 
 function evapotranspiration(V, t, θ)
     θ[1]*V/(V+θ[2])
