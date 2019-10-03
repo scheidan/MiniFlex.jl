@@ -116,7 +116,7 @@ struct HydroModel
     reservoirs::Array
     precip::Function
     θtransform::TransformVariables.AbstractTransform
-    mask_routing::BitArray{2}
+    routing_mask::BitArray{2}
     connections::Array{Connection,1}
     dV::Function
 end
@@ -125,8 +125,8 @@ end
 function HydroModel(connections::Array{Connection,1}, precip::Function)
 
     # construct mask routing matrix
-    mask_routing, reservoirs = routing_mat(connections)
-    N = size(mask_routing, 1)
+    routing_mask, reservoirs = routing_mat(connections)
+    N = size(routing_mask, 1)
 
     # connections
     sort!(connections, lt=(a,b) -> a.reservoirs[1] < b.reservoirs[1])
@@ -150,7 +150,7 @@ function HydroModel(connections::Array{Connection,1}, precip::Function)
         dV .-= evapotranspiration.(V, t, p.θevap)
     end
 
-    HydroModel(reservoirs, precip, θtransform, mask_routing, connections, dV)
+    HydroModel(reservoirs, precip, θtransform, routing_mask, connections, dV)
 end
 
 
@@ -237,7 +237,7 @@ evapotranspiration(sol, t_obs)
 function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
 
     # check parameters
-    n_storages = size(m.mask_routing, 1)
+    n_storages = size(m.routing_mask, 1)
 
     for k in [:θflow, :θevap, :θrouting]
         if  !(k in keys(p))
@@ -279,7 +279,7 @@ function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
     # construct routing matrix
     routing = zeros(eltype(p.θflow[1]), n_storages, n_storages) - I
     for i in 1:length(p.θrouting)
-        routing[m.mask_routing[:,i], i] .= p.θrouting[i]
+        routing[m.routing_mask[:,i], i] .= p.θrouting[i]
     end
 
     # solve ode
@@ -300,13 +300,13 @@ end
 
 # pretty printing short
 function Base.show(io::IO, m::HydroModel)
-    print(io, "HydroModel ($(size(m.mask_routing,1)) reservoirs)")
+    print(io, "HydroModel ($(size(m.routing_mask,1)) reservoirs)")
 end
 
 # pretty printing verbose
 function Base.show(io::IO, ::MIME"text/plain", m::HydroModel)
 
-    println(io, "HydroModel model with $(size(m.mask_routing,1)) reservoirs connected by:")
+    println(io, "HydroModel model with $(size(m.routing_mask,1)) reservoirs connected by:")
     for f in m.connections
         println(io, " ", f)
     end
