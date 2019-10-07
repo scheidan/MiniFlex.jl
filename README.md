@@ -16,7 +16,7 @@ in time based on differential equations. The most important design goals are:
 - Ensure compatibility with Automatic Differentation libraries such as
   `ForwardDiff.jl` to experiment with more efficient optimization algorithms
     and Hamiltonian MC.
-- Guarantee fast run time.
+- Aim for fast run time.
 
 
 ## Installation
