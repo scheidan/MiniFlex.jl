@@ -56,8 +56,10 @@ function Base.show(io::IO, ::MIME"text/plain", sol::ModelSolution)
     println(io, "   $(sol.θ.θflow)")
     println(io, " θevap:")
     println(io, "   $(sol.θ.θevap)")
-    println(io, " θrouting:")
-    println(io, "   $(sol.θ.θrouting)")
+    if :θrouting in keys(sol.θ)
+        println(io, " θrouting:")
+        println(io, "   $(sol.θ.θrouting)")
+    end
 
     println(io, "\nFlows time series can be obtained with:\n"
             * " Q(solution, time_range)")
@@ -89,12 +91,16 @@ end
 
 function routing_mat(fpaths)
     # get all reservoirs
-    all_reservoirs = Symbol[]
-    for fp in fpaths
-        push!(all_reservoirs, fp.reservoirs[1])
-        append!(all_reservoirs, fp.reservoirs[2])
+    if length(fpaths) > 0
+        all_reservoirs = Symbol[]
+        for fp in fpaths
+            push!(all_reservoirs, fp.reservoirs[1])
+            append!(all_reservoirs, fp.reservoirs[2])
+        end
+        sort!(unique!(all_reservoirs))
+    else
+        all_reservoirs = [:reservoir]
     end
-    sort!(unique!(all_reservoirs))
 
     # Build adjacency Matrix
     n = length(all_reservoirs)
@@ -137,11 +143,18 @@ function HydroModel(; connections::Array{Connection,1}, P_rate::Function, PET_ra
     Nout = [length(c.reservoirs[2]) for c in connections] # number of outgoing connections
 
     # define parameter transformation: Real vector -> NamedTuple
-    θtransform = as((
-        θflow = as(Tuple(as(Vector, asℝ₊, 2) for _ in 1:N)),
-        θevap = as(Tuple(as(Vector, asℝ₊, 2) for _ in 1:N)),
-        θrouting = as(Tuple(UnitSimplex(n) for n in Nout))
-    ))
+    if length(reservoir_names) > 1
+        θtransform = as((
+            θflow = as(Tuple(as(Vector, asℝ₊, 2) for _ in 1:N)),
+            θevap = as(Tuple(as(Vector, asℝ₊, 2) for _ in 1:N)),
+            θrouting = as(Tuple(UnitSimplex(n) for n in Nout))
+        ))
+    else
+        θtransform = as((
+            θflow = as(Tuple(as(Vector, asℝ₊, 2) for _ in 1:N)),
+            θevap = as(Tuple(as(Vector, asℝ₊, 2) for _ in 1:N))
+        ))
+    end
 
     # define ODE for all storages (p is a NamedTuple)
     function dV(dV, V, p, t, routing, outQ)
@@ -245,53 +258,66 @@ Q(sol, t_obs)
 function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
 
     # check parameters
-    n_storages = size(m.routing_mask, 1)
+    n_reservoirs = length(m.reservoir_names)
 
-    for k in [:θflow, :θevap, :θrouting]
+    for k in [:θflow, :θevap]
         if  !(k in keys(p))
             error("Parameters must contain a field '$(k)'")
         end
     end
+    if (n_reservoirs > 1) && (:θrouting ∉ keys(p))
+        error("Parameters must contain a field ':θrouting'")
+    end
+    if (n_reservoirs === 1) && (:θrouting ∈ keys(p))
+        error("Parameters for models with single reservoir must not contain a field ':θrouting'")
+    end
+    for k in keys(p)
+        k ∉ [:θflow, :θevap ,:θrouting] ? error("Parameters contain unknown field '$(k)'!") : nothing
+    end
 
-    if(!(length(p.θflow) == length(p.θevap) == n_storages))
+    if !(length(p.θflow) == length(p.θevap) == n_reservoirs)
         error("Parameter dimensions are not matching the number " *
-              "of storages ($(n_storages))!")
+              "of storages ($(n_reservoirs))!")
     end
 
-    if(length(m.P_rate(minimum(time))) != n_storages)
+    if length(m.P_rate(minimum(time))) != n_reservoirs
         error("Precipitation function must return a vector of the same length " *
-              "as the number of storages ($(n_storages))!")
+              "as the number of storages ($(n_reservoirs))!")
     end
 
-    if(length(V0) != n_storages)
+    if length(V0) != n_reservoirs
         error("Initial values must be a vector of the same length " *
-              "as the number of storages ($(n_storages))!")
+            "as the number of storages ($(n_reservoirs))!")
     end
 
-    if(length(p.θrouting) != length(m.connections))
+    if (n_reservoirs > 1) && (length(p.θrouting) != length(m.connections))
         error("Routing parameters (θrouting):", ("\n - $(p)" for p in p.θrouting)...,
               "\ndo not match connections:", ("\n - $(c)" for c in m.connections)..., "\n")
     end
 
-    for i in 1:length(p.θrouting)
-        if length(p.θrouting[i]) != length(m.connections[i].reservoirs[2])
-            error("Parameters ($(p.θrouting[i])) do not match connection:\n",
-                  m.connections[i])
+    if n_reservoirs > 1
+        for i in 1:length(p.θrouting)
+            if length(p.θrouting[i]) != length(m.connections[i].reservoirs[2])
+                error("Parameters ($(p.θrouting[i])) do not match connection:\n",
+                      m.connections[i])
         end
-        if sum(p.θrouting[i]) ≉ 1
-            error("Parameters ($(p.θrouting[i])) do not sum to one, see connection:\n",
-                  m.connections[i])
+            if sum(p.θrouting[i]) ≉ 1
+                error("Parameters ($(p.θrouting[i])) do not sum to one, see connection:\n",
+                      m.connections[i])
+            end
         end
     end
 
     # construct routing matrix
-    routing = zeros(eltype(p.θflow[1]), n_storages, n_storages) - I
-    for i in 1:length(p.θrouting)
-        routing[m.routing_mask[:,i], i] .= p.θrouting[i]
+    routing = zeros(eltype(p.θflow[1]), n_reservoirs, n_reservoirs) - I
+    if n_reservoirs > 1
+        for i in 1:length(p.θrouting)
+            routing[m.routing_mask[:,i], i] .= p.θrouting[i]
+        end
     end
 
     # solve ode
-    outQ = zeros(eltype(p.θflow[1]), n_storages)
+    outQ = zeros(eltype(p.θflow[1]), n_reservoirs)
     prob = ODEProblem((dV,V,p,t) -> m.dV(dV,V,p,t,routing, outQ),
                       nested_eltype(p.θflow).(V0),
                       (minimum(time), maximum(time)),
@@ -309,19 +335,24 @@ end
 
 # pretty printing short
 function Base.show(io::IO, m::HydroModel)
-    print(io, "HydroModel ($(size(m.routing_mask,1)) reservoirs)")
+    print(io, "HydroModel ($(length(m.reservoir_names)) reservoirs)")
 end
 
 # pretty printing verbose
 function Base.show(io::IO, ::MIME"text/plain", m::HydroModel)
 
-    println(io, "HydroModel model with $(size(m.routing_mask,1)) reservoirs connected by:")
-    for f in m.connections
-        println(io, " ", f)
-    end
-    println(io, "\nParameters and outputs are ordered as:")
-    for (i, r) in enumerate(m.reservoir_names)
-        i==1 ? print(io, " $i: ", r) : print(io, ", $i: ", r)
+    n_reservoirs = length(m.reservoir_names)
+    if n_reservoirs > 1
+        println(io, "HydroModel model with $(length(m.reservoir_names)) reservoirs connected by:")
+        for f in m.connections
+            println(io, " ", f)
+        end
+        println(io, "\nParameters and outputs are ordered as:")
+        for (i, r) in enumerate(m.reservoir_names)
+            i==1 ? print(io, " $i: ", r) : print(io, ", $i: ", r)
+        end
+    else
+        println(io, "HydroModel model with single reservoir")
     end
 end
 
