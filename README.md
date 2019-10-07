@@ -43,6 +43,8 @@ import Interpolations
 import ForwardDiff
 import StaticArrays
 
+using Plots
+
 # -----------
 # import resp. fake some data
 
@@ -97,6 +99,11 @@ sol
 # extract runoff for each reservoir
 t_obs = 0:22.:1000
 Q(sol, t_obs)
+
+
+# or plot it
+plot(sol, value="Q")
+plot(sol, value="volume")
 
 
 # any additional arguments are passed to DifferentialEquations.solve(). E.g.

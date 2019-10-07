@@ -12,7 +12,10 @@ import Reexport
 Reexport.@reexport using DifferentialEquations
 using LinearAlgebra
 using TransformVariables
-%
+
+using RecipesBase
+
+
 import Base.show
 
 export HydroModel
@@ -35,6 +38,7 @@ export Q, ET
 struct ModelSolution
     solution::DiffEqBase.AbstractODESolution
     θ::NamedTuple
+    reservoir_names::Array{Symbol}
 end
 
 # pretty printing short
@@ -112,7 +116,7 @@ end
 # Type for model definition
 
 struct HydroModel
-    reservoirs::Array
+    reservoir_names::Array{Symbol}
     P_rate::Function
     PET_rate::Function
     θtransform::TransformVariables.AbstractTransform
@@ -125,7 +129,7 @@ end
 function HydroModel(; connections::Array{Connection,1}, P_rate::Function, PET_rate::Function)
 
     # construct mask routing matrix
-    routing_mask, reservoirs = routing_mat(connections)
+    routing_mask, reservoir_names = routing_mat(connections)
     N = size(routing_mask, 1)
 
     # connections
@@ -150,7 +154,7 @@ function HydroModel(; connections::Array{Connection,1}, P_rate::Function, PET_ra
         dV .-= ET.(V, PET_rate(t), t, p.θevap)
     end
 
-    HydroModel(reservoirs, P_rate, PET_rate, θtransform, routing_mask, connections, dV)
+    HydroModel(reservoir_names, P_rate, PET_rate, θtransform, routing_mask, connections, dV)
 end
 
 
@@ -229,7 +233,9 @@ sol = my_model(p, V0, 0:10.0:1000) # default solver
 sol2 = my_model(randn(17), V0, 0:10.0:1000) # call with parameter vector
 sol3 = my_model(p, V0, 0:10.0:1000, ImplicitMidpoint(), reltol=1e-3, dt=5)
 
-plot(sol) # requires `Plots` to by loaded
+# requires`Plots` to by loaded
+plot(sol, value="Q")
+plot(sol, value="volume") # requires
 
 # extract run-off time-series (note, time points can be different)
 t_obs = 10:2.5:100
@@ -291,7 +297,8 @@ function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
                       (minimum(time), maximum(time)),
                       p)
     sol = solve(prob, args...; saveat=time, kwargs...)
-    ModelSolution(sol, p)
+
+    ModelSolution(sol, p, m.reservoir_names)
 end
 
 function (m::HydroModel)(p::AbstractArray, V0, time, args...; kwargs...)
@@ -313,7 +320,7 @@ function Base.show(io::IO, ::MIME"text/plain", m::HydroModel)
         println(io, " ", f)
     end
     println(io, "\nParameters and outputs are ordered as:")
-    for (i, r) in enumerate(m.reservoirs)
+    for (i, r) in enumerate(m.reservoir_names)
         i==1 ? print(io, " $i: ", r) : print(io, ", $i: ", r)
     end
 end
@@ -358,5 +365,33 @@ function nested_eltype(x)
     end
     return(y)
 end
+
+
+# -----------
+# Plot recipes
+
+
+@recipe function f(::Type{ModelSolution}, modsol::ModelSolution; value="Q", add_marker=false)
+    xlabel --> "time"
+    linewidth --> 2
+    if add_marker
+        markershape --> :circle
+        markersize --> 1
+    end
+    if value == "Q"
+        seriestype  :=  :path
+        label --> ["outflow of $r" for r in modsol.reservoir_names]
+        ylab --> "flow"
+        Q(modsol, modsol.solution.t)'
+    elseif value == "volume"
+        label --> ["volume of $r" for r in modsol.reservoir_names]
+        ylab --> "volume"
+        modsol.solution
+    else
+        error("For 'value' only the strings \"Q\" or \"volume\" are allowed!")
+    end
+end
+
+
 
 end # module
