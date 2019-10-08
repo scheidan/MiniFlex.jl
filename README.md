@@ -82,9 +82,7 @@ my_model = HydroModel(
 Of course different reservoir names than `S1`, `S2`, ... can be used.
 
 If you print the `my_model`  the order of the reservoirs is shown
-(always alphabetically). Make sure this matches `P_rate` and
-
-`PET_rate`.
+(always alphabetically). Make sure this matches `P_rate` and `PET_rate`.
 
 ### Solve model
 
@@ -111,11 +109,11 @@ Then solve the model an extract the outflows:
 
 ```julia
 V_init = zeros(4)
-sol = my_model(p, V_init, 0:1000.0)
+sol = my_model(p, V_init, 0:1000)
 
 # extract runoff for each reservoir at t_obs.
 # Note, any points in time are possible
-t_obs = 0:22.3:1000.0
+t_obs = 0:22.3:1000
 Q(sol, t_obs)
 
 ```
@@ -134,7 +132,7 @@ You can pass additional arguments to influence the ODE solver,
 see [here](http://docs.juliadiffeq.org/latest/basics/common_solver_opts.html). For example:
 
 ```julia
-my_model(p, V_init, 0:50:1000.0, saveat=0:50:1000.0
+my_model(p, V_init, 0:1000, saveat=0:50:1000
                ImplicitMidpoint(), reltol=1e-3, dt = 0.1)
 
 ```
@@ -149,8 +147,7 @@ fractions always add up to one.
 
 ```julia
 v = randn(17)
-sol = my_model(v, V_init, 0:10.0:1000,
-               reltol=1e-3);
+sol = my_model(v, V_init, 0:1000);
 
 
 sol.θ    # parameter tuple corresponding to `v`
@@ -158,15 +155,14 @@ sol.θ    # parameter tuple corresponding to `v`
 
 
 ### Automatic Differentation
-Using Automatic Differentation libraries such as `ForwardDiff`, it is
+Using Automatic Differentation libraries (currently only tested with [`ForwardDiff`](http://www.juliadiff.org/ForwardDiff.jl/stable/)), it is
 possible to compute the gradient of the solution with respect to the
 parameters:
 ```julia
 using ForwardDiff: gradient
 
-
 # simulate some "observations" for outflow of S3
-flow_data = collect(hcat([ifelse(t < 600, [t,50.0], [t, 0.0]) for t in 1:10:1000.0]...)')
+flow_data = collect(hcat([ifelse(t < 600, [t,50.0], [t, 0.0]) for t in 1:10:1000]...)')
 
 
 # define loss function
@@ -185,7 +181,6 @@ end
 
 # derive gradient function
 loss_grad(v, t_obs, Q_obs) = gradient(v -> loss(p, t_obs, Q_obs), p)
-
 
 # calculate loss
 loss(v, flow_data[:,1], flow_data[:,2])

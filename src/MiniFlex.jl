@@ -242,9 +242,9 @@ p = (θflow = ([0.1, 1.1],
 
 V0 = zeros(4)   # inital storage
 
-sol = my_model(p, V0, 0:10.0:1000) # default solver
-sol2 = my_model(randn(17), V0, 0:10.0:1000) # call with parameter vector
-sol3 = my_model(p, V0, 0:10.0:1000, ImplicitMidpoint(), reltol=1e-3, dt=5)
+sol = my_model(p, V0, 0:1000) # default solver
+sol2 = my_model(randn(17), V0, 0:1000) # call with parameter vector
+sol3 = my_model(p, V0, 0:1000, ImplicitMidpoint(), reltol=1e-3, dt=5)
 
 # requires`Plots` to by loaded
 plot(sol, value="Q")
@@ -314,6 +314,11 @@ function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
         for i in 1:length(p.θrouting)
             routing[m.routing_mask[:,i], i] .= p.θrouting[i]
         end
+    end
+
+    # ensure that time is an Array or Range of Floats64
+    if eltype(time) <: Int
+        time = time .* 1.0
     end
 
     # solve ode
