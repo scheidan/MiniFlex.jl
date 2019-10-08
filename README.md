@@ -32,51 +32,66 @@ in time based on differential equations. The most important design goals are:
 
 ## Usage
 
-TODO
-The example below is mainly a placeholder.
+### Preparation of Input Data
+
+As `MiniFlex` is defines as continuous model without predefined
+time-steps, the precipitation and potential evapotranspiration _rates_
+must be available for every point in time. This means observed
+time-series must be interpolated.
+
+`MiniFlex` expects a function that if evaluated at time `t` returns a
+vector with the input rates for every reservoir.
 
 ``` julia
+using Interpolations
+using StaticArrays: @SVector
 
+
+# simulate some observations
+t_precip = range(0, stop=900, length=3*365);
+obs_precip = [t<500 ? abs(sin(t/50)*15) : 0.0  for t in t_rain]
+
+# returns a function that interpolates the rain observations
+rain = LinearInterpolation(t_precip, obs_precip, extrapolation_bc = 0)
+
+# Our model will have 4 reservoirs but only
+# the first one obtains precipitations
+P_rate(t) = @SVector [rain(t), 0.0, 0.0, 0.0]
+
+# For the similicity of the example we assume
+# no potential evapotranspiration
+PET_rate(t) = @SVector zeros(4)
+```
+
+### Model definition
+
+Next we define the model i.e. the reservoirs and there connections:
+
+``` julia
 using MiniFlex
 
-import Interpolations
-import ForwardDiff
-import StaticArrays
-
-using Plots
-
-# -----------
-# import resp. fake some data
-
-t_rain = range(0, stop=900, length=222);
-rain_obs = [ifelse(t<500, abs(sin(t/50)*15), 0.0)  for t in t_rain];
-# function to interpolate rain obersvations
-rain = Interpolations.LinearInterpolation(t_rain, rain_obs,
-                                          extrapolation_bc = 0);
-# it must return the input for each storage at time t
-precip(t) = StaticArrays.@SVector [rain(t), 0.0, 0.0, 0.0]  # using SVector avoids allocations
-
-
-# -----------
-# define model
-
 my_model = HydroModel(
-    [Connection(:S1 => [:S2, :S3]),  # outflow from :S1 to :S2 and :S3
-     Connection(:S2 => :S3),
-     Connection(:S3 => :S4)],
-
-    P_rate = precip,
-    PET_rate = x -> zeros(4)  # no evapotranspiration
+    connections = [Connection(:S1 => [:S2, :S3])
+	               Connection(:S2 => :S3),
+                   Connection(:S3 => :S4)],
+    P_rate = P_rate,
+    PET_rate = PET_rate
 )
 
+```
+Of course different reservoir names than `S1`, `S2`, ... can be used.
 
-my_model
+If you print the `my_model`  the order of the reservoirs is shown
+(always alphabetically). Make sure this matches `P_rate` and
 
-# -----------
-# solve model
+`PET_rate`.
 
+### Solve model
 
-# define a NamedTuple for parameters
+First we define the model parameters:
+``` julia
+
+# parameters must be a NamedTuple with the following structure
 p = (θflow = ([0.1, 0.01],
               [0.5, 0.01],
               [0.2, 0.01],
@@ -85,52 +100,81 @@ p = (θflow = ([0.1, 0.01],
               [2.2, 20.0],
               [3.3, 20.0],
               [2.2, 20.0]),
-     θrouting = ([0.3, 0.7], # connection from :S1
-                 [1.0],      # connection from :S2
-                 [1.0])      # connection from :S3
+     θrouting = ([0.3, 0.7], # from S1 -> 30% to S2, 70% to S3
+                 [1.0],      # from S2 -> 100% to S3
+                 [1.0])      # from S3 -> 100% to S4
      )
 
+```
 
-sol = my_model(p, zeros(4), 0:10.0:1000,
-               reltol=1e-3);
+Then solve the model an extract the outflows:
 
-sol
+```julia
+V_init = zeros(4)
+sol = my_model(p, V_init, 0:1000.0)
 
-# extract runoff for each reservoir
-t_obs = 0:22.:1000
+# extract runoff for each reservoir at t_obs.
+# Note, any points in time are possible
+t_obs = 0:22.3:1000.0
 Q(sol, t_obs)
 
+```
 
-# or plot it
+The model outputs can be plotted:
+```julia
+
+using Plots
+
 plot(sol, value="Q")
 plot(sol, value="volume")
 
+```
 
-# any additional arguments are passed to DifferentialEquations.solve(). E.g.
-sol = my_model(p, zeros(4), 0:10.0:1000,
+You can pass additional arguments to influence the ODE solver,
+see [here](http://docs.juliadiffeq.org/latest/basics/common_solver_opts.html). For example:
+
+```julia
+my_model(p, V_init, 0:50:1000.0, saveat=0:50:1000.0
                ImplicitMidpoint(), reltol=1e-3, dt = 0.1)
 
-# Alternatively, the model can be called with a vector. This is
-# useful for optimization:
-v = randn(16)
-sol = my_model(v, zeros(4), 0:10.0:1000,
+```
+
+Optimization and sampling routines usually expect a function that can
+be called by a vector.  Therefore a model can also be called by a
+parameter vector.
+
+Note, any vector in ℝⁿ is allowed, as parameters are automatically transformed to the
+correct parameter space. For example it is ensured that the outflow
+fractions always add up to one.
+
+```julia
+v = randn(17)
+sol = my_model(v, V_init, 0:10.0:1000,
                reltol=1e-3);
 
-# Note, `v` can contain values from -Inf to Inf. The parameters are
-# automatically transformed to the correct parameter space.
+
+sol.θ    # parameter tuple corresponding to `v`
+```
 
 
-# -----------
-# Automatic Differentation with ForwardDiff
+### Automatic Differentation
+Using Automatic Differentation libraries such as `ForwardDiff`, it is
+possible to compute the gradient of the solution with respect to the
+parameters:
+```julia
+using ForwardDiff: gradient
 
-# loss function
-function loss(v, t_obs, Q_obs)
 
-    # initial bucket volume
-    V_init = zeros(4)
+# simulate some "observations" for outflow of S3
+flow_data = collect(hcat([ifelse(t < 600, [t,50.0], [t, 0.0]) for t in 1:10:1000.0]...)')
+
+
+# define loss function
+function loss(p, t_obs, Q_obs)
 
     # solve ODE
-    sol = my_model(v, V_init, t_obs)
+    V_init = zeros(4)
+    sol = my_model(p, V_init, t_obs, saveat=t_obs)
 
     # get Q3
     Q3 = Q(sol, t_obs)[3,:]
@@ -140,13 +184,11 @@ function loss(v, t_obs, Q_obs)
 end
 
 # derive gradient function
-loss_grad(p, t_obs, Q_obs) = ForwardDiff.gradient(p -> loss(p, t_obs, Q_obs), p)
+loss_grad(v, t_obs, Q_obs) = gradient(v -> loss(p, t_obs, Q_obs), p)
 
 
-# calculate loss and the gradients
+# calculate loss
 loss(v, flow_data[:,1], flow_data[:,2])
+# and the respective gradient
 loss_grad(v, flow_data[:,1], flow_data[:,2])
-
 ```
-
-`
