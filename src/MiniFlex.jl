@@ -322,7 +322,7 @@ function (m::HydroModel)(p::NamedTuple, V0, time, args...; kwargs...)
                       nested_eltype(p.θflow).(V0),
                       (minimum(time), maximum(time)),
                       p)
-    sol = solve(prob, args...; saveat=time, kwargs...)
+    sol = solve(prob, args...; kwargs...)
 
     ModelSolution(sol, p, m.reservoir_names)
 end
