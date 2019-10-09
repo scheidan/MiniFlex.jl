@@ -49,7 +49,7 @@ using StaticArrays: @SVector
 
 # simulate some observations
 t_precip = range(0, stop=900, length=3*365);
-obs_precip = [t<500 ? abs(sin(t/50)*15) : 0.0  for t in t_rain]
+obs_precip = [t<500 ? abs(sin(t/50)*15) : 0.0  for t in t_precip]
 
 # returns a function that interpolates the rain observations
 rain = LinearInterpolation(t_precip, obs_precip, extrapolation_bc = 0)
@@ -124,6 +124,7 @@ The model outputs can be plotted:
 using Plots
 
 plot(sol, value="Q")
+plot(sol, value="Q", xlims=(100,200), legend=false)
 plot(sol, value="volume")
 
 ```

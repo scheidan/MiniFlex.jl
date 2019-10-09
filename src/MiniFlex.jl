@@ -407,26 +407,37 @@ end
 # Plot recipes
 
 
-@recipe function f(::Type{ModelSolution}, modsol::ModelSolution; value="Q", add_marker=false)
-    xlabel --> "time"
+@recipe function f(modsol::ModelSolution; value="Q")
+    xguide --> "time"
     linewidth --> 2
-    if add_marker
-        markershape --> :circle
-        markersize --> 1
-    end
+
     if value == "Q"
+        # taken from DiffEqBase.jl/src/solutions/solution_interface.jl
+        n = min(Int(1e5), modsol.solution.tslocation==0 ?
+                (typeof(modsol.solution.prob) <: DiffEqBase.AbstractDiscreteProblem ?
+                 max(1000,100*length(modsol.solution)) :
+                 max(1000,10*length(modsol.solution))) :
+                1000*modsol.solution.tslocation)
+
         seriestype  :=  :path
         label --> ["outflow of $r" for r in modsol.reservoir_names]
-        ylab --> "flow"
-        Q(modsol, modsol.solution.t)'
+        yguide --> "flow"
+
+        endpoints = get(plotattributes, :xlims, extrema(modsol.solution.t))
+        tplot = range(endpoints..., length=n)
+        x := tplot
+        y = collect(Q(modsol, tplot)')
+        (tplot, y)
+
     elseif value == "volume"
         label --> ["volume of $r" for r in modsol.reservoir_names]
-        ylab --> "volume"
+        yguide --> "volume"
         modsol.solution
     else
         error("For 'value' only the strings \"Q\" or \"volume\" are allowed!")
     end
 end
+
 
 
 
