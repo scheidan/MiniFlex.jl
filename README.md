@@ -63,7 +63,7 @@ P_rate(t) = @SVector [rain(t), 0.0, 0.0, 0.0]
 PET_rate(t) = @SVector zeros(4)
 ```
 
-### Model definition
+### Model Definition
 
 Next we define the model i.e. the reservoirs and there connections:
 
@@ -71,7 +71,7 @@ Next we define the model i.e. the reservoirs and there connections:
 using MiniFlex
 
 my_model = HydroModel(
-    connections = [Connection(:S1 => [:S2, :S3])
+    connections = [Connection(:S1 => [:S2, :S3]),
 	               Connection(:S2 => :S3),
                    Connection(:S3 => :S4)],
     P_rate = P_rate,
@@ -84,7 +84,7 @@ Of course different reservoir names than `S1`, `S2`, ... can be used.
 If you print the `my_model`  the order of the reservoirs is shown
 (always alphabetically). Make sure this matches `P_rate` and `PET_rate`.
 
-### Solve model
+### Solve Model
 
 First we define the model parameters:
 ``` julia
