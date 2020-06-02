@@ -1,3 +1,6 @@
+# !This repo outdated and not maintained! 
+Thanks to the enormous progress of `DifferentialEquations.jl` it became trivial to calcualte gradients of ODE solutions.
+
 # MiniFlex - A Conceptual Hydrological Model for Automatic Differentation
 
 [![Build Status](https://travis-ci.com/scheidan/MiniFlex.jl.svg?branch=master)](https://travis-ci.com/scheidan/MiniFlex.jl)
